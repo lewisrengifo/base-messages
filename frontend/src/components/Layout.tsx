@@ -10,15 +10,17 @@ import {
   Settings,
   PlusCircle,
   User,
-  Menu
+  Menu,
+  Loader2
 } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
+import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
-import { Button } from '@/src/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/src/components/ui/avatar';
-import { Separator } from '@/src/components/ui/separator';
-import { ScrollArea } from '@/src/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/src/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useAuth } from '@/context/AuthContext';
 
 import { 
   DropdownMenu,
@@ -27,7 +29,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-} from '@/src/components/ui/dropdown-menu';
+} from '@/components/ui/dropdown-menu';
 
 export type PageId = 'login' | 'connection' | 'contacts' | 'templates' | 'campaigns' | 'template-builder' | 'campaign-builder' | 'submission-sent' | 'campaign-sent' | 'campaign-analytics';
 
@@ -45,6 +47,8 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activePage, onNavigate }: LayoutProps) {
+  const { user, logout, isLoading } = useAuth();
+
   const navItems = [
     { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
     { id: 'templates', label: 'Templates', icon: FileText },
@@ -59,6 +63,16 @@ export default function Layout({ children, activePage, onNavigate }: LayoutProps
   };
 
   const activeNavId = getActiveNavId(activePage);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // The AuthContext will clear the user, and the LoginGate in App will show login page
+      window.location.reload(); // Simple way to reset app state
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full gap-2">
@@ -108,11 +122,16 @@ export default function Layout({ children, activePage, onNavigate }: LayoutProps
         </Button>
         <Button 
           variant="ghost" 
-          onClick={() => onNavigate('login')}
+          onClick={handleLogout}
+          disabled={isLoading}
           className="justify-start gap-3 px-4 py-6 text-destructive font-headline text-sm font-semibold hover:bg-destructive/10 hover:text-destructive"
         >
-          <LogOut size={20} />
-          <span>Logout</span>
+          {isLoading ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : (
+            <LogOut size={20} />
+          )}
+          <span>{isLoading ? 'Logging out...' : 'Logout'}</span>
         </Button>
       </div>
     </div>
@@ -176,11 +195,11 @@ export default function Layout({ children, activePage, onNavigate }: LayoutProps
           </Button>
           <Avatar className="h-8 w-8 border">
             <AvatarImage 
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" 
-              alt="User Profile" 
+              src={user?.avatar || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
+              alt={user?.name || "User Profile"}
               referrerPolicy="no-referrer"
             />
-            <AvatarFallback>JD</AvatarFallback>
+            <AvatarFallback>{user?.name?.split(' ').map(n => n[0]).join('') || 'U'}</AvatarFallback>
           </Avatar>
         </div>
       </nav>

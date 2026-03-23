@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Megaphone, Users, FileText, Calendar, Send, CheckCircle2, Search, ChevronRight } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Label } from '@/src/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Badge } from '@/src/components/ui/badge';
-import { cn } from '@/src/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { PageId } from '../components/Layout';
 
 export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {

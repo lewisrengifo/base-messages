@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserPlus, Upload, Search, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -9,15 +9,15 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/src/components/ui/table';
-import { Avatar, AvatarFallback } from '@/src/components/ui/avatar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+} from '@/components/ui/table';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu';
+} from '@/components/ui/dropdown-menu';
 
 const CONTACTS = [
   { id: 1, name: 'Jane Doe', phone: '+1 (555) 012-3456', initials: 'JD', color: 'bg-blue-100 text-blue-700' },

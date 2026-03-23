@@ -1,0 +1,1361 @@
+openapi: 3.0.3
+info:
+  title: Base Messaging Platform API
+  description: |
+    RESTful API for the Base Messaging Platform - A WhatsApp Business messaging and campaign management system.
+    
+    This API provides endpoints for:
+    - Authentication and session management
+    - Campaign creation, management, and analytics
+    - Message template management and Meta approval
+    - Contact management and import
+    - WhatsApp Business API connection
+    - Real-time notifications
+  version: 1.0.0
+  contact:
+    name: Base API Support
+    email: api@base-messaging.com
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+  - url: https://api.base-messaging.com/v1
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Dashboard
+    description: Dashboard statistics and overview
+  - name: Campaigns
+    description: Campaign management and operations
+  - name: Campaign Analytics
+    description: Campaign performance metrics and reports
+  - name: Templates
+    description: Message template management
+  - name: Contacts
+    description: Contact management and import
+  - name: Connection
+    description: WhatsApp Business API connection management
+  - name: Notifications
+    description: User notifications and alerts
+
+paths:
+  # Authentication
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate current user session
+      responses:
+        '204':
+          description: Logout successful
+
+  # Dashboard
+  /stats:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard statistics
+      description: Retrieve key metrics for the dashboard overview
+      responses:
+        '200':
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+
+  # Campaigns
+  /campaigns:
+    get:
+      tags:
+        - Campaigns
+      summary: List campaigns
+      description: Get paginated list of campaigns with optional filters
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, scheduled, sending, sent, canceled, failed]
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by campaign name
+      responses:
+        '200':
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+
+    post:
+      tags:
+        - Campaigns
+      summary: Create campaign
+      description: Create a new broadcast campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /campaigns/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+
+    get:
+      tags:
+        - Campaigns
+      summary: Get campaign details
+      description: Retrieve detailed information about a specific campaign
+      responses:
+        '200':
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignDetail'
+        '404':
+          description: Campaign not found
+
+    delete:
+      tags:
+        - Campaigns
+      summary: Delete campaign
+      description: Delete a campaign and its associated data
+      responses:
+        '204':
+          description: Campaign deleted successfully
+        '404':
+          description: Campaign not found
+
+  /campaigns/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+
+    post:
+      tags:
+        - Campaigns
+      summary: Cancel scheduled campaign
+      description: Cancel a campaign that hasn't been sent yet
+      responses:
+        '200':
+          description: Campaign canceled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Cannot cancel campaign in current status
+        '404':
+          description: Campaign not found
+
+  /campaigns/{id}/duplicate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+
+    post:
+      tags:
+        - Campaigns
+      summary: Duplicate campaign
+      description: Create a copy of an existing campaign
+      responses:
+        '201':
+          description: Campaign duplicated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '404':
+          description: Campaign not found
+
+  # Campaign Analytics
+  /campaigns/{id}/analytics:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+
+    get:
+      tags:
+        - Campaign Analytics
+      summary: Get campaign analytics
+      description: Retrieve detailed analytics for a specific campaign
+      responses:
+        '200':
+          description: Campaign analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignAnalytics'
+        '404':
+          description: Campaign not found
+
+  /campaigns/{id}/analytics/export:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+
+    get:
+      tags:
+        - Campaign Analytics
+      summary: Export campaign analytics
+      description: Export campaign analytics data in CSV or JSON format
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, json]
+            default: json
+      responses:
+        '200':
+          description: Analytics export
+          content:
+            application/json:
+              schema:
+                type: object
+            text/csv:
+              schema:
+                type: string
+
+  # Templates
+  /templates:
+    get:
+      tags:
+        - Templates
+      summary: List templates
+      description: Get list of message templates with optional filters
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [APPROVED, PENDING, REJECTED, DRAFT]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [Marketing, Utility, Authentication]
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by template name or content
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+
+    post:
+      tags:
+        - Templates
+      summary: Create template
+      description: Create a new message template for Meta approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: Template created and submitted for approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid template data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags:
+        - Templates
+      summary: Get template details
+      description: Retrieve detailed information about a template
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '404':
+          description: Template not found
+
+    put:
+      tags:
+        - Templates
+      summary: Update template
+      description: Update template details (only for draft or rejected templates)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: Template updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Cannot update template in current status
+        '404':
+          description: Template not found
+
+    delete:
+      tags:
+        - Templates
+      summary: Delete template
+      description: Archive or delete a template
+      responses:
+        '204':
+          description: Template deleted successfully
+        '404':
+          description: Template not found
+
+  /templates/{id}/resubmit:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    post:
+      tags:
+        - Templates
+      summary: Resubmit template for approval
+      description: Resubmit a rejected template after edits
+      responses:
+        '200':
+          description: Template resubmitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Only rejected templates can be resubmitted
+        '404':
+          description: Template not found
+
+  /templates/performance:
+    get:
+      tags:
+        - Templates
+      summary: Get template performance data
+      description: Retrieve performance metrics for all templates
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Template performance data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplatePerformance'
+
+  # Contacts
+  /contacts:
+    get:
+      tags:
+        - Contacts
+      summary: List contacts
+      description: Get paginated list of contacts with optional search
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or phone number
+        - name: group
+          in: query
+          schema:
+            type: string
+          description: Filter by contact group/segment
+      responses:
+        '200':
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactListResponse'
+
+    post:
+      tags:
+        - Contacts
+      summary: Create contact
+      description: Add a new contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContactRequest'
+      responses:
+        '201':
+          description: Contact created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          description: Invalid contact data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Contact with this phone number already exists
+
+  /contacts/import:
+    post:
+      tags:
+        - Contacts
+      summary: Import contacts from CSV
+      description: Bulk import contacts from a CSV file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV file containing contacts
+                groupName:
+                  type: string
+                  description: Optional group name for imported contacts
+      responses:
+        '202':
+          description: Import started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobResponse'
+
+  /contacts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags:
+        - Contacts
+      summary: Get contact details
+      description: Retrieve detailed information about a contact
+      responses:
+        '200':
+          description: Contact details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactDetail'
+        '404':
+          description: Contact not found
+
+    put:
+      tags:
+        - Contacts
+      summary: Update contact
+      description: Update contact information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContactRequest'
+      responses:
+        '200':
+          description: Contact updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '404':
+          description: Contact not found
+
+    delete:
+      tags:
+        - Contacts
+      summary: Delete contact
+      description: Delete a contact
+      responses:
+        '204':
+          description: Contact deleted successfully
+        '404':
+          description: Contact not found
+
+  /contacts/groups:
+    get:
+      tags:
+        - Contacts
+      summary: List contact groups
+      description: Get list of contact segments/groups
+      responses:
+        '200':
+          description: List of contact groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContactGroup'
+
+  # Connection
+  /connection:
+    get:
+      tags:
+        - Connection
+      summary: Get connection status
+      description: Check WhatsApp Business API connection status
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionStatus'
+
+    post:
+      tags:
+        - Connection
+      summary: Connect WhatsApp API
+      description: Configure and verify WhatsApp Business API credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionRequest'
+      responses:
+        '200':
+          description: Connection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionStatus'
+        '400':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed with Meta API
+
+    delete:
+      tags:
+        - Connection
+      summary: Disconnect API
+      description: Disconnect and remove WhatsApp API credentials
+      responses:
+        '204':
+          description: Disconnected successfully
+
+  /connection/test:
+    post:
+      tags:
+        - Connection
+      summary: Test connection
+      description: Test connectivity to Meta WhatsApp API
+      responses:
+        '200':
+          description: Connection test successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  latency:
+                    type: integer
+                    description: Response time in milliseconds
+
+  # Notifications
+  /notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List notifications
+      description: Get user notifications
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+
+  /notifications/mark-all-read:
+    post:
+      tags:
+        - Notifications
+      summary: Mark all as read
+      description: Mark all notifications as read
+      responses:
+        '204':
+          description: All notifications marked as read
+
+  /notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    post:
+      tags:
+        - Notifications
+      summary: Mark notification as read
+      description: Mark a specific notification as read
+      responses:
+        '204':
+          description: Notification marked as read
+        '404':
+          description: Notification not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login
+
+  schemas:
+    # Authentication
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@company.com
+        password:
+          type: string
+          format: password
+          example: securePassword123
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        avatar:
+          type: string
+          format: uri
+
+    # Dashboard
+    DashboardStats:
+      type: object
+      properties:
+        totalSent:
+          type: integer
+          description: Total messages sent
+          example: 124802
+        openRate:
+          type: number
+          format: float
+          description: Average open rate percentage
+          example: 64.2
+        activeScheduled:
+          type: integer
+          description: Number of scheduled campaigns
+          example: 14
+        nextCampaign:
+          type: object
+          properties:
+            name:
+              type: string
+            timeUntil:
+              type: string
+              description: Human-readable time until next campaign
+              example: 2h
+
+    # Campaigns
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: '^CAMP-[0-9]+$'
+          example: CAMP-9283
+        name:
+          type: string
+          example: Q3 Product Reveal
+        templateName:
+          type: string
+          example: Modern_Dark_Theme_V2
+        scheduledDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, scheduled, sending, sent, canceled, failed]
+          example: sent
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignDetail:
+      allOf:
+        - $ref: '#/components/schemas/Campaign'
+        - type: object
+          properties:
+            template:
+              $ref: '#/components/schemas/Template'
+            audience:
+              type: object
+              properties:
+                group:
+                  type: string
+                recipientCount:
+                  type: integer
+            schedule:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                time:
+                  type: string
+
+    CampaignListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreateCampaignRequest:
+      type: object
+      required:
+        - name
+        - templateId
+        - audience
+        - schedule
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Summer Flash Sale
+        templateId:
+          type: integer
+          description: ID of the approved template to use
+        audience:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum: [all, group, segment]
+            groupId:
+              type: string
+              description: Required if type is 'group'
+        schedule:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum: [immediate, scheduled]
+            date:
+              type: string
+              format: date
+            time:
+              type: string
+              pattern: '^[0-9]{2}:[0-9]{2}$'
+
+    # Campaign Analytics
+    CampaignAnalytics:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        summary:
+          type: object
+          properties:
+            totalSent:
+              type: integer
+            delivered:
+              type: integer
+            opened:
+              type: integer
+            clicked:
+              type: integer
+            bounced:
+              type: integer
+            failed:
+              type: integer
+        metrics:
+          type: object
+          properties:
+            openRate:
+              type: number
+              format: float
+              example: 64.2
+            clickRate:
+              type: number
+              format: float
+              example: 18.4
+            bounceRate:
+              type: number
+              format: float
+              example: 0.4
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              time:
+                type: string
+              sent:
+                type: integer
+              delivered:
+                type: integer
+              opened:
+                type: integer
+        deviceDistribution:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                enum: [Mobile, Desktop, Tablet]
+              value:
+                type: number
+                format: float
+        topLinks:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              url:
+                type: string
+              clicks:
+                type: integer
+              ctr:
+                type: string
+
+    # Templates
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: Order Confirmation
+        category:
+          type: string
+          enum: [Marketing, Utility, Authentication]
+          example: Utility
+        language:
+          type: string
+          example: EN_US
+        status:
+          type: string
+          enum: [APPROVED, PENDING, REJECTED, DRAFT]
+          example: APPROVED
+        content:
+          type: string
+          example: 'Hello {{1}}, thank you for your order #{{2}}. We are preparing it for shipment!'
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              position:
+                type: integer
+              example:
+                type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/Template'
+        - type: object
+          properties:
+            rejectionReason:
+              type: string
+              description: Present if status is REJECTED
+            performance:
+              $ref: '#/components/schemas/TemplatePerformance'
+
+    TemplateListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreateTemplateRequest:
+      type: object
+      required:
+        - name
+        - category
+        - content
+        - language
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9_]+$'
+          description: Lowercase with underscores
+          example: welcome_series_q4
+        category:
+          type: string
+          enum: [Marketing, Utility, Authentication]
+        content:
+          type: string
+          maxLength: 1024
+          example: 'Hello {{1}}! Thank you for choosing us. Your order {{2}} has been confirmed.'
+        language:
+          type: string
+          example: EN_US
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              example:
+                type: string
+
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        content:
+          type: string
+        variables:
+          type: array
+          items:
+            type: object
+
+    TemplatePerformance:
+      type: object
+      properties:
+        templateId:
+          type: integer
+        templateName:
+          type: string
+        category:
+          type: string
+        openRate:
+          type: string
+          example: 92.4%
+        ctr:
+          type: string
+          description: Click-through rate
+          example: 14.1%
+        lastSent:
+          type: string
+          format: date
+        views:
+          type: string
+          example: 12.4k
+        conversion:
+          type: string
+          example: 98%
+
+    # Contacts
+    Contact:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: Jane Doe
+        phone:
+          type: string
+          example: '+1 (555) 012-3456'
+        initials:
+          type: string
+          example: JD
+        color:
+          type: string
+          example: bg-blue-100 text-blue-700
+        createdAt:
+          type: string
+          format: date-time
+
+    ContactDetail:
+      allOf:
+        - $ref: '#/components/schemas/Contact'
+        - type: object
+          properties:
+            email:
+              type: string
+              format: email
+            groups:
+              type: array
+              items:
+                type: string
+            messageHistory:
+              type: array
+              items:
+                type: object
+                properties:
+                  campaignId:
+                    type: string
+                  campaignName:
+                    type: string
+                  sentAt:
+                    type: string
+                    format: date-time
+                  status:
+                    type: string
+
+    ContactListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreateContactRequest:
+      type: object
+      required:
+        - name
+        - phone
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          pattern: '^\+[1-9]\d{1,14}$'
+          description: E.164 format
+          example: '+15550123456'
+        email:
+          type: string
+          format: email
+        groups:
+          type: array
+          items:
+            type: string
+
+    UpdateContactRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        groups:
+          type: array
+          items:
+            type: string
+
+    ContactGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: VIP Customers
+        count:
+          type: integer
+          description: Number of contacts in group
+          example: 124
+
+    ImportJobResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        estimatedCompletion:
+          type: string
+          format: date-time
+
+    # Connection
+    ConnectionStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, inactive, error]
+          example: inactive
+        phoneNumberId:
+          type: string
+          description: Last 4 digits only for security
+          example: '****8475'
+        wabaId:
+          type: string
+          description: Last 4 digits only for security
+          example: '****5204'
+        lastHeartbeat:
+          type: string
+          format: date-time
+          nullable: true
+        endpointConnectivity:
+          type: string
+          enum: [connected, failed]
+          example: failed
+
+    ConnectionRequest:
+      type: object
+      required:
+        - phoneNumberId
+        - wabaId
+        - accessToken
+      properties:
+        phoneNumberId:
+          type: string
+          pattern: '^[0-9]+$'
+          example: '104829375028475'
+        wabaId:
+          type: string
+          pattern: '^[0-9]+$'
+          description: WhatsApp Business Account ID
+          example: '948273615204'
+        accessToken:
+          type: string
+          description: Permanent system user access token
+
+    # Notifications
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          example: Campaign Approved
+        description:
+          type: string
+          example: Your Q3 Product Reveal template has been approved by Meta.
+        time:
+          type: string
+          description: Human-readable relative time
+          example: 2h ago
+        unread:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [campaign, template, system, billing]
+
+    # Common
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

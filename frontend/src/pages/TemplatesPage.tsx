@@ -1,10 +1,10 @@
 import React from 'react';
 import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Badge } from '@/src/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -12,20 +12,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/src/components/ui/table';
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/src/components/ui/select';
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu';
+} from '@/components/ui/dropdown-menu';
 
 const TEMPLATES = [
   {

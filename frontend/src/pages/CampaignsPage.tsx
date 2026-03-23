@@ -1,8 +1,8 @@
 import React from 'react';
 import { TrendingUp, Verified, Clock, BarChart3, Megaphone, CheckCircle2, Calendar, XCircle, ArrowRight, MoreVertical, Edit, Copy, Trash2, Eye } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -10,8 +10,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/src/components/ui/table';
-import { Badge } from '@/src/components/ui/badge';
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import {
   Pagination,
   PaginationContent,
@@ -19,13 +19,13 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/src/components/ui/pagination';
+} from '@/components/ui/pagination';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu';
+} from '@/components/ui/dropdown-menu';
 
 const CAMPAIGNS = [
   { id: 'CAMP-9283', name: 'Q3 Product Reveal', template: 'Modern_Dark_Theme_V2', date: 'Oct 12, 2023 • 09:00 AM', status: 'Sent', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700' },

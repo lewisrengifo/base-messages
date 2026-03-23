@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: backend
+  
+  # R2DBC Configuration
+  r2dbc:
+    url: r2dbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${DB_NAME}
+    username: ${POSTGRES_USERNAME}
+    password: ${POSTGRES_PASSWORD}
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:Y2hhbmdlVGhpc0luUHJvZHVjdGlvbldpdGhBMjU2Qml0S2V5Q2hhbmdlVGhpc0luUHJvZHVjdGlvbldpdGhBMjU2Qml0S2V5}
+
+# Logging
+logging:
+  level:
+    org.springframework.security: DEBUG
+    com.lewisrp.basemessages: DEBUG
+
+# Server Configuration
+server:
+  port: 8080

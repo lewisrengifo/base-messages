@@ -8,17 +8,24 @@ import TemplateBuilderPage from './pages/TemplateBuilderPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import CampaignAnalyticsPage from './pages/CampaignAnalyticsPage';
 import LoginPage from './pages/LoginPage';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent } from '@/src/components/ui/card';
+import { AuthProvider } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { CheckCircle2 } from 'lucide-react';
 
 export default function App() {
-  const [activePage, setActivePage] = useState<PageId>('login');
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+function AppContent() {
+  const [activePage, setActivePage] = useState<PageId>('campaigns');
 
   const renderPage = () => {
     switch (activePage) {
-      case 'login':
-        return <LoginPage onLogin={() => setActivePage('campaigns')} />;
       case 'connection':
         return <ConnectionPage />;
       case 'contacts':
@@ -43,14 +50,28 @@ export default function App() {
   };
 
   return (
-    activePage === 'login' ? (
-      renderPage()
-    ) : (
-      <Layout activePage={activePage} onNavigate={setActivePage}>
-        {renderPage()}
-      </Layout>
-    )
+    <div className="min-h-screen bg-background">
+      <LoginGate>
+        <Layout activePage={activePage} onNavigate={setActivePage}>
+          {renderPage()}
+        </Layout>
+      </LoginGate>
+    </div>
   );
+}
+
+/**
+ * Component that shows LoginPage if not authenticated,
+ * otherwise shows children
+ */
+function LoginGate({ children }: { children: React.ReactNode }) {
+  const [showLogin, setShowLogin] = React.useState(true);
+
+  if (showLogin) {
+    return <LoginPage onLogin={() => setShowLogin(false)} />;
+  }
+
+  return <>{children}</>;
 }
 
 function CampaignSentPage({ onBack, onNavigate }: { onBack: () => void, onNavigate: (page: PageId) => void }) {

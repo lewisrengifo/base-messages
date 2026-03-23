@@ -13,11 +13,11 @@ import {
   Download,
   Share2
 } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/src/components/ui/card';
-import { Badge } from '@/src/components/ui/badge';
-import { Separator } from '@/src/components/ui/separator';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { 
   ResponsiveContainer, 
   AreaChart, 

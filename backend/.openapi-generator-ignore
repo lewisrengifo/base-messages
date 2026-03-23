@@ -1,0 +1,10 @@
+# ${project.baseDir}/.openapi-generator-ignore
+
+# https://github.com/OpenAPITools/openapi-generator/blob/master/docs/customization.md#ignore-file-format
+#
+# Use this file to prevent files from being overwritten by the generator.
+# The patterns follow closely to .gitignore or .dockerignore.
+
+**/OpenApiGeneratorApplication.java
+**/test/**/*
+#target/generated-sources/openapi/src/main/resources/**

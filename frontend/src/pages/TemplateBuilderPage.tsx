@@ -1,11 +1,11 @@
 import React from 'react';
 import { ArrowLeft, Edit3, Route, Image, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Textarea } from '@/src/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
-import { Label } from '@/src/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 
 import { PageId } from '../components/Layout';
 

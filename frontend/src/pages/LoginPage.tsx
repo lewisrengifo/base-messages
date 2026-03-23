@@ -1,26 +1,50 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
-import { Button } from '@/src/components/ui/button';
-import { Input } from '@/src/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/src/components/ui/card';
-import { Label } from '@/src/components/ui/label';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { motion } from 'motion/react';
+import { useAuth } from '@/context/AuthContext';
 
 interface LoginPageProps {
   onLogin: () => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { login, isLoading, error, clearError, isAuthenticated } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    // Simulate login delay
-    setTimeout(() => {
-      setIsLoading(false);
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
       onLogin();
-    }, 1200);
+    }
+  }, [isAuthenticated, onLogin]);
+
+  // Clear error when user types
+  useEffect(() => {
+    if (error) {
+      clearError();
+    }
+  }, [email, password, clearError, error]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      return;
+    }
+
+    try {
+      await login(email, password);
+      // onLogin will be called by the useEffect when isAuthenticated changes
+    } catch {
+      // Error is already handled by AuthContext
+      // We just need to prevent the form from submitting
+    }
   };
 
   return (
@@ -51,6 +75,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <CardDescription className="text-base">Enter your credentials to access your dashboard</CardDescription>
           </CardHeader>
           <CardContent className="p-8 pt-4">
+            {/* Error Alert */}
+            {error && (
+              <Alert variant="destructive" className="mb-6 rounded-xl">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-xs font-bold uppercase tracking-widest opacity-60 ml-1">Email Address</Label>
@@ -61,6 +93,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                     type="email" 
                     placeholder="name@company.com" 
                     required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
                     className="h-14 pl-12 rounded-2xl bg-muted/50 border-none focus-visible:ring-primary/20 transition-all"
                   />
                 </div>
@@ -77,13 +112,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                     type="password" 
                     placeholder="••••••••" 
                     required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
                     className="h-14 pl-12 rounded-2xl bg-muted/50 border-none focus-visible:ring-primary/20 transition-all"
                   />
                 </div>
               </div>
               <Button 
                 type="submit" 
-                disabled={isLoading}
+                disabled={isLoading || !email || !password}
                 className="w-full h-14 rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
                 {isLoading ? (
