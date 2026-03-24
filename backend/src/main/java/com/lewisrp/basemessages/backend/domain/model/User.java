@@ -20,13 +20,13 @@ public class User {
     private String passwordHash;
     private String name;
     private String avatarUrl;
-    private boolean active;
+    private boolean isActive;
     
     /**
      * Validates if the user can login (is active).
      */
     public boolean canLogin() {
-        return active;
+        return isActive;
     }
     
     /**

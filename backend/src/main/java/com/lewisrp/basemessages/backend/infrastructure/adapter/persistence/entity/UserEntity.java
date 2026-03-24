@@ -31,7 +31,7 @@ public class UserEntity {
     
     private String avatarUrl;
     
-    private Boolean active;
+    private Boolean isActive;
     
     private LocalDateTime createdAt;
     

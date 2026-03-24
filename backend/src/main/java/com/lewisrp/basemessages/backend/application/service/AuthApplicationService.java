@@ -32,7 +32,10 @@ public class AuthApplicationService implements AuthUseCase {
         log.debug("Attempting login for user: {}", command.getEmail());
         
         return userRepository.findByEmail(command.getEmail())
-                .flatMap(user -> authenticateUser(user, command.getPassword()))
+                .flatMap(user -> {
+                    log.info("User found: {}", user.getEmail());
+                    return authenticateUser(user, command.getPassword());
+                })
                 .switchIfEmpty(Mono.error(new InvalidCredentialsException("Invalid email or password")));
     }
     
@@ -50,19 +53,20 @@ public class AuthApplicationService implements AuthUseCase {
     
     private Mono<LoginResult> authenticateUser(User user, String rawPassword) {
         if (!user.canLogin()) {
-            log.warn("User account is disabled: {}", user.getEmail());
+            log.info("User account is disabled: {}", user.getEmail());
             return Mono.error(new InvalidCredentialsException("Account is disabled"));
         }
         
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            log.warn("Invalid password for user: {}", user.getEmail());
+            log.info("Invalid password for user: {}", user.getEmail());
             return Mono.error(new InvalidCredentialsException("Invalid email or password"));
         }
         
         // Generate tokens
         String accessToken = tokenProvider.generateAccessToken(user);
         String refreshToken = tokenProvider.generateRefreshToken(user);
-        
+
+        log.info("Tokens generated for user: {}", user.getEmail());
         // Store refresh token server-side (7 days = 604800 seconds)
         refreshTokenStore.store(refreshToken, user.getId(), 604800);
         
