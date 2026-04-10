@@ -18,7 +18,7 @@ interface TemplateBuilderPageProps {
 export default function TemplateBuilderPage({ onNavigate }: TemplateBuilderPageProps) {
   const [formData, setFormData] = useState<CreateTemplateRequest>({
     name: '',
-    category: 'MARKETING',
+    category: 'Marketing',
     content: '',
     language: 'en_US',
     variables: [],
@@ -123,9 +123,9 @@ export default function TemplateBuilderPage({ onNavigate }: TemplateBuilderPageP
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MARKETING">Marketing</SelectItem>
-                      <SelectItem value="UTILITY">Utility</SelectItem>
-                      <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
+                      <SelectItem value="Marketing">Marketing</SelectItem>
+                      <SelectItem value="Utility">Utility</SelectItem>
+                      <SelectItem value="Authentication">Authentication</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

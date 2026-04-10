@@ -32,12 +32,20 @@ import type { Template, TemplateCategory, TemplateStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  Marketing: Tag,
+  Utility: ShoppingBag,
+  Authentication: Lock,
+  // Fallback for uppercase values from backend
   MARKETING: Tag,
   UTILITY: ShoppingBag,
   AUTHENTICATION: Lock,
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
+  Marketing: 'bg-amber-100 text-amber-700',
+  Utility: 'bg-secondary-container text-secondary',
+  Authentication: 'bg-primary-container/20 text-primary',
+  // Fallback for uppercase values from backend
   MARKETING: 'bg-amber-100 text-amber-700',
   UTILITY: 'bg-secondary-container text-secondary',
   AUTHENTICATION: 'bg-primary-container/20 text-primary',
@@ -156,9 +164,9 @@ export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="MARKETING">Marketing</SelectItem>
-              <SelectItem value="UTILITY">Utility</SelectItem>
-              <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
+              <SelectItem value="Marketing">Marketing</SelectItem>
+              <SelectItem value="Utility">Utility</SelectItem>
+              <SelectItem value="Authentication">Authentication</SelectItem>
             </SelectContent>
           </Select>
         </div>

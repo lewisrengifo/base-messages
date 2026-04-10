@@ -68,8 +68,10 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                 .map(this::toApiModel)
                 .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template))
                 .onErrorResume(e -> {
+                    System.err.println("Error creating template: " + e.getMessage());
+                    e.printStackTrace();
                     exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
-                    return Mono.just(ResponseEntity.badRequest().build());
+                    return Mono.just(ResponseEntity.badRequest().body(null));
                 });
     }
 
@@ -84,7 +86,7 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                     
                     // Convert category string to TemplateDetail.CategoryEnum
                     if (dto.getCategory() != null) {
-                        detail.setCategory(TemplateDetail.CategoryEnum.fromValue(dto.getCategory()));
+                        detail.setCategory(TemplateDetail.CategoryEnum.valueOf(dto.getCategory()));
                     }
                     
                     detail.setLanguage(dto.getLanguage());
@@ -147,7 +149,7 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
         
         // Convert category string to enum
         if (dto.getCategory() != null) {
-            template.setCategory(Template.CategoryEnum.fromValue(dto.getCategory()));
+            template.setCategory(Template.CategoryEnum.valueOf(dto.getCategory()));
         }
         
         template.setLanguage(dto.getLanguage());

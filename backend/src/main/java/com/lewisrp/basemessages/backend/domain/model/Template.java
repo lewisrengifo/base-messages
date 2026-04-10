@@ -43,10 +43,21 @@ public class Template {
     }
 
     /**
-     * Supported template languages.
+     * Supported template languages as defined by Meta/WhatsApp.
+     * Language codes follow the pattern: language_REGION or just language
      */
     public enum TemplateLanguage {
-        EN_US, ES, PT_BR
+        // English variants
+        EN_US, EN_GB, EN,
+        // Spanish variants  
+        ES, ES_ES, ES_MX, ES_AR,
+        // Portuguese variants
+        PT_BR, PT_PT, PT,
+        // Other major languages
+        AF, AR, AZ, BN, BG, CA, ZH_CN, ZH_HK, ZH_TW, HR, CS, DA, NL,
+        ET, FI, FR, DE, EL, GU, HE, HI, HU, ID, GA, IT, JA, KN, KK,
+        KO, LO, LV, LT, MK, MS, ML, MR, NB, FA, PL, PA, RO, RU, SR,
+        SK, SL, SV, TA, TE, TH, TR, UK, UR, UZ, VI
     }
 
     /**

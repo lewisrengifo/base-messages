@@ -69,7 +69,7 @@ export interface ApiResponse<T> {
 // ============================================================================
 
 export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
-export type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+export type TemplateCategory = 'Marketing' | 'Utility' | 'Authentication';
 
 export interface TemplateVariable {
   position: number;

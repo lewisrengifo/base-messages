@@ -1,13 +1,15 @@
 package com.lewisrp.basemessages.backend.infrastructure.adapter.security.config;
 
+import com.lewisrp.basemessages.backend.infrastructure.adapter.security.JwtReactiveAuthenticationManager;
+import com.lewisrp.basemessages.backend.infrastructure.adapter.security.JwtServerAuthenticationConverter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.AuthenticationWebFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -24,7 +26,21 @@ import java.util.List;
 @Configuration
 @EnableWebFluxSecurity
 @EnableReactiveMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+    
+    private final JwtReactiveAuthenticationManager jwtAuthenticationManager;
+    private final JwtServerAuthenticationConverter jwtAuthenticationConverter;
+    
+    /**
+     * Configure the JWT authentication filter.
+     */
+    @Bean
+    public AuthenticationWebFilter jwtAuthenticationWebFilter() {
+        AuthenticationWebFilter filter = new AuthenticationWebFilter(jwtAuthenticationManager);
+        filter.setServerAuthenticationConverter(jwtAuthenticationConverter);
+        return filter;
+    }
     
     /**
      * Configure the security filter chain.
@@ -34,6 +50,7 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .addFilterAt(jwtAuthenticationWebFilter(), SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(exchanges -> exchanges
                         // Public endpoints
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()

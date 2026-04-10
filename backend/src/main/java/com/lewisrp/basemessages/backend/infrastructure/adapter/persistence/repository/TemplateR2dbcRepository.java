@@ -2,6 +2,7 @@ package com.lewisrp.basemessages.backend.infrastructure.adapter.persistence.repo
 
 import com.lewisrp.basemessages.backend.infrastructure.adapter.persistence.entity.TemplateEntity;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
@@ -48,4 +49,13 @@ public interface TemplateR2dbcRepository extends ReactiveCrudRepository<Template
      * Count templates by status.
      */
     Mono<Long> countByStatus(String status);
+
+    /**
+     * Save template with explicit enum casting for PostgreSQL.
+     */
+    @Query("INSERT INTO templates (name, category, language, status, content, created_at, updated_at) " +
+           "VALUES (:#{#entity.name}, CAST(:#{#entity.category} AS template_category), :#{#entity.language}, " +
+           "CAST(:#{#entity.status} AS template_status), :#{#entity.content}, :#{#entity.createdAt}, :#{#entity.updatedAt}) " +
+           "RETURNING *")
+    Mono<TemplateEntity> saveWithEnumCast(TemplateEntity entity);
 }
