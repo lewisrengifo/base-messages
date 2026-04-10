@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,69 +26,78 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-const TEMPLATES = [
-  {
-    id: 1,
-    name: 'Order Confirmation',
-    category: 'Utility',
-    lang: 'EN_US',
-    status: 'APPROVED',
-    content: '"Hello {{1}}, thank you for your order #{{2}}. We are preparing it for shipment and will notify you soon!"',
-    views: '12.4k',
-    conversion: '98%',
-    icon: ShoppingBag,
-    iconColor: 'bg-secondary-container text-secondary',
-  },
-  {
-    id: 2,
-    name: 'Marketing Sale',
-    category: 'Marketing',
-    lang: 'MULTI',
-    status: 'PENDING',
-    content: '"Flash Sale! Use code {{1}} to get 40% OFF on all sapphire collections. Valid until {{2}}."',
-    views: '-',
-    conversion: '-',
-    icon: Tag,
-    iconColor: 'bg-amber-100 text-amber-700',
-    time: 'Submitted 2h ago'
-  },
-  {
-    id: 3,
-    name: '2FA Login',
-    category: 'Authentication',
-    lang: 'GLOBAL',
-    status: 'APPROVED',
-    content: '"{{1}} is your verification code. For security, do not share this code with anyone."',
-    views: '145k',
-    conversion: '100%',
-    icon: Lock,
-    iconColor: 'bg-primary-container/20 text-primary',
-  },
-  {
-    id: 4,
-    name: 'Product Feedback',
-    category: 'Utility',
-    lang: 'EN_GB',
-    status: 'REJECTED',
-    content: '"How was your experience today? Rate us here {{1}} and get a special coupon."',
-    views: '-',
-    conversion: '-',
-    icon: MessageSquare,
-    iconColor: 'bg-error/10 text-error',
-    error: 'Policy violation detected'
-  },
-];
-
-const PERFORMANCE_DATA = [
-  { name: 'Order Confirmation', category: 'Utility', openRate: '92.4%', ctr: '14.1%', lastSent: 'May 24, 2024' },
-  { name: 'Welcome Onboard', category: 'Marketing', openRate: '88.2%', ctr: '22.5%', lastSent: 'May 23, 2024' },
-  { name: 'Password Reset', category: 'Auth', openRate: '99.1%', ctr: '0.0%', lastSent: 'May 24, 2024' },
-];
-
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { listTemplates, deleteTemplate } from '@/api/templates';
+import type { Template, TemplateCategory, TemplateStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
 
-export default function TemplatesPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  MARKETING: Tag,
+  UTILITY: ShoppingBag,
+  AUTHENTICATION: Lock,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  MARKETING: 'bg-amber-100 text-amber-700',
+  UTILITY: 'bg-secondary-container text-secondary',
+  AUTHENTICATION: 'bg-primary-container/20 text-primary',
+};
+
+const STATUS_VARIANTS: Record<string, string> = {
+  APPROVED: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
+  PENDING: 'bg-amber-100 text-amber-700 hover:bg-amber-100',
+  REJECTED: 'bg-red-100 text-red-700 hover:bg-red-100',
+  DRAFT: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+};
+
+interface TemplatesPageProps {
+  onNavigate: (page: PageId) => void;
+}
+
+export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<TemplateStatus | 'all'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
+
+  const fetchTemplates = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await listTemplates({
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        category: categoryFilter === 'all' ? undefined : categoryFilter,
+        search: searchQuery || undefined,
+        limit: 50,
+      });
+      setTemplates(response.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load templates');
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, statusFilter, categoryFilter]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this template?')) return;
+    try {
+      await deleteTemplate(id);
+      await fetchTemplates();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete template');
+    }
+  };
+
+  const handleRefresh = () => {
+    fetchTemplates();
+  };
+
   return (
     <div className="space-y-12">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -98,7 +107,7 @@ export default function TemplatesPage({ onNavigate }: { onNavigate: (page: PageI
             Streamline your WhatsApp communications. Craft, test, and deploy approved message templates for global engagement.
           </p>
         </div>
-        <Button 
+        <Button
           onClick={() => onNavigate('template-builder')}
           className="h-14 px-8 rounded-xl font-bold text-base shadow-xl shadow-primary/20 gap-3 active:scale-95 transition-all"
         >
@@ -107,151 +116,176 @@ export default function TemplatesPage({ onNavigate }: { onNavigate: (page: PageI
         </Button>
       </header>
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         <div className="md:col-span-6 flex items-center bg-muted/50 rounded-xl px-4">
           <Search className="text-muted-foreground/60 mr-3" size={18} />
-          <Input 
-            type="text" 
+          <Input
+            type="text"
             placeholder="Search templates by name or keyword..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent border-none focus-visible:ring-0 h-12 text-sm font-medium p-0"
           />
         </div>
         <div className="md:col-span-2">
-          <Select defaultValue="all">
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TemplateStatus | 'all')}>
             <SelectTrigger className="h-12 bg-muted/50 border-none rounded-xl font-bold text-muted-foreground focus:ring-0">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="APPROVED">Approved</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="REJECTED">Rejected</SelectItem>
+              <SelectItem value="DRAFT">Draft</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="md:col-span-2">
-          <Select defaultValue="all">
+          <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as TemplateCategory | 'all')}>
             <SelectTrigger className="h-12 bg-muted/50 border-none rounded-xl font-bold text-muted-foreground focus:ring-0">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Category</SelectItem>
-              <SelectItem value="marketing">Marketing</SelectItem>
-              <SelectItem value="utility">Utility</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="MARKETING">Marketing</SelectItem>
+              <SelectItem value="UTILITY">Utility</SelectItem>
+              <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="md:col-span-2">
-          <Button variant="outline" className="h-12 w-full rounded-xl font-bold text-sm gap-2 border-muted-foreground/20 hover:bg-muted/30">
-            <Settings2 size={18} />
-            More Filters
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="h-12 w-full rounded-xl font-bold text-sm gap-2 border-muted-foreground/20 hover:bg-muted/30"
+          >
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+            Refresh
           </Button>
         </div>
       </div>
 
       {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {TEMPLATES.map((template) => (
-          <Card key={template.id} className="group border-none shadow-sm hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col h-full relative overflow-hidden rounded-2xl">
-            <CardHeader className="p-6 pb-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", template.iconColor)}>
-                    <template.icon size={20} />
-                  </div>
-                  <div>
-                    <CardTitle className="font-bold text-foreground group-hover:text-primary transition-colors text-base">{template.name}</CardTitle>
-                    <p className="technical-label">{template.category} • {template.lang}</p>
-                  </div>
-                </div>
-                <Badge variant={
-                  template.status === 'APPROVED' ? "default" :
-                  template.status === 'PENDING' ? "secondary" :
-                  "destructive"
-                } className={cn(
-                  "rounded-full text-[10px] font-bold px-2.5 py-0.5",
-                  template.status === 'APPROVED' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                  template.status === 'PENDING' && "bg-amber-100 text-amber-700 hover:bg-amber-100"
-                )}>
-                  {template.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="p-6 pt-0 flex flex-col flex-grow">
-              <div className={cn(
-                "bg-muted/30 rounded-xl p-4 mb-6 flex-grow border-l-4",
-                template.status === 'REJECTED' ? "border-destructive/20" : "border-primary/20"
-              )}>
-                <p className="text-xs font-medium text-muted-foreground leading-relaxed italic">
-                  {template.content}
-                </p>
-              </div>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {templates.map((template) => {
+            const Icon = CATEGORY_ICONS[template.category] || MessageSquare;
+            const iconColor = CATEGORY_COLORS[template.category] || 'bg-muted text-muted-foreground';
+            const statusVariant = STATUS_VARIANTS[template.status] || '';
 
-              <div className="flex items-center justify-between pt-4 border-t">
-                {template.error ? (
-                  <div className="flex items-center gap-2 text-destructive">
-                    <AlertCircle size={14} />
-                    <span className="text-[11px] font-bold">{template.error}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-4 text-muted-foreground">
-                    {template.time ? (
-                      <div className="flex items-center gap-1">
-                        <RefreshCw size={12} className="animate-spin-slow" />
-                        <span className="text-[11px] font-bold italic">{template.time}</span>
+            return (
+              <Card key={template.id} className="group border-none shadow-sm hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col h-full relative overflow-hidden rounded-2xl">
+                <CardHeader className="p-6 pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", iconColor)}>
+                        <Icon size={20} />
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-1">
-                          <Eye size={14} />
-                          <span className="text-[11px] font-bold">{template.views}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Zap size={14} />
-                          <span className="text-[11px] font-bold">{template.conversion}</span>
-                        </div>
-                      </>
-                    )}
+                      <div>
+                        <CardTitle className="font-bold text-foreground group-hover:text-primary transition-colors text-base">{template.name}</CardTitle>
+                        <p className="technical-label">{template.category} • {template.language}</p>
+                      </div>
+                    </div>
+                    <Badge
+                      className={cn("rounded-full text-[10px] font-bold px-2.5 py-0.5", statusVariant)}
+                    >
+                      {template.status}
+                    </Badge>
                   </div>
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger render={
-                    <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10">
-                      {template.status === 'REJECTED' ? <RefreshCw size={18} /> : 
-                       template.status === 'PENDING' ? <Edit3 size={18} /> : 
-                       <MoreVertical size={18} />}
-                    </Button>
-                  } />
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>View Details</DropdownMenuItem>
-                    <DropdownMenuItem>Edit Template</DropdownMenuItem>
-                    <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardContent>
+                </CardHeader>
+
+                <CardContent className="p-6 pt-0 flex flex-col flex-grow">
+                  <div className={cn(
+                    "bg-muted/30 rounded-xl p-4 mb-6 flex-grow border-l-4",
+                    template.status === 'REJECTED' ? "border-destructive/20" : "border-primary/20"
+                  )}>
+                    <p className="text-xs font-medium text-muted-foreground leading-relaxed italic line-clamp-4">
+                      {template.content}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center gap-4 text-muted-foreground">
+                      {template.status === 'PENDING' ? (
+                        <div className="flex items-center gap-1">
+                          <RefreshCw size={12} className="animate-spin-slow" />
+                          <span className="text-[11px] font-bold italic">Awaiting approval</span>
+                        </div>
+                      ) : template.status === 'REJECTED' ? (
+                        <div className="flex items-center gap-2 text-destructive">
+                          <AlertCircle size={14} />
+                          <span className="text-[11px] font-bold">Policy violation</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1">
+                            <Eye size={14} />
+                            <span className="text-[11px] font-bold">-</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Zap size={14} />
+                            <span className="text-[11px] font-bold">-</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10">
+                          {template.status === 'REJECTED' ? <RefreshCw size={18} /> :
+                           template.status === 'PENDING' ? <Edit3 size={18} /> :
+                           <MoreVertical size={18} />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onNavigate('template-builder')}>
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onNavigate('template-builder')}>
+                          Edit Template
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDelete(template.id)} className="text-destructive">
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {/* Create New Card */}
+          <Card
+            onClick={() => onNavigate('template-builder')}
+            className="group cursor-pointer bg-primary/5 rounded-2xl p-6 border-2 border-dashed border-primary/20 hover:border-primary/40 flex flex-col items-center justify-center gap-4 transition-all h-full"
+          >
+            <div className="h-14 w-14 rounded-full bg-background flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+              <Plus className="text-primary" size={28} />
+            </div>
+            <div className="text-center">
+              <p className="font-headline font-extrabold text-primary">Create Template</p>
+              <p className="technical-label mt-1">Unlimited Potential</p>
+            </div>
           </Card>
-        ))}
+        </div>
+      )}
 
-        {/* Create New Card */}
-        <Card 
-          onClick={() => onNavigate('template-builder')}
-          className="group cursor-pointer bg-primary/5 rounded-2xl p-6 border-2 border-dashed border-primary/20 hover:border-primary/40 flex flex-col items-center justify-center gap-4 transition-all h-full"
-        >
-          <div className="h-14 w-14 rounded-full bg-background flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-            <Plus className="text-primary" size={28} />
-          </div>
-          <div className="text-center">
-            <p className="font-headline font-extrabold text-primary">Create Template</p>
-            <p className="technical-label mt-1">Unlimited Potential</p>
-          </div>
-        </Card>
-      </div>
-
-      {/* Performance Ledger */}
+      {/* Performance Ledger - Static for now, will be populated in Phase 3 */}
       <section className="mt-20">
         <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
           <BarChart3 className="text-primary" size={20} />
@@ -269,13 +303,13 @@ export default function TemplatesPage({ onNavigate }: { onNavigate: (page: PageI
               </TableRow>
             </TableHeader>
             <TableBody>
-              {PERFORMANCE_DATA.map((row, i) => (
-                <TableRow key={i} className="hover:bg-muted/20 transition-colors border-b">
-                  <TableCell className="px-8 py-5 font-bold text-sm">{row.name}</TableCell>
-                  <TableCell className="px-8 py-5 text-sm text-muted-foreground">{row.category}</TableCell>
-                  <TableCell className="px-8 py-5 text-sm font-mono">{row.openRate}</TableCell>
-                  <TableCell className="px-8 py-5 text-sm font-mono">{row.ctr}</TableCell>
-                  <TableCell className="px-8 py-5 text-sm text-right font-medium text-muted-foreground">{row.lastSent}</TableCell>
+              {templates.slice(0, 5).map((template) => (
+                <TableRow key={template.id} className="hover:bg-muted/20 transition-colors border-b">
+                  <TableCell className="px-8 py-5 font-bold text-sm">{template.name}</TableCell>
+                  <TableCell className="px-8 py-5 text-sm text-muted-foreground">{template.category}</TableCell>
+                  <TableCell className="px-8 py-5 text-sm font-mono">-</TableCell>
+                  <TableCell className="px-8 py-5 text-sm font-mono">-</TableCell>
+                  <TableCell className="px-8 py-5 text-sm text-right font-medium text-muted-foreground">Never</TableCell>
                 </TableRow>
               ))}
             </TableBody>

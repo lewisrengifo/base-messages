@@ -29,6 +29,13 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - ✅ List templates with filtering
 - ✅ Get template details
 
+### Templates Frontend Integration ✅
+- ✅ TemplatesPage with real API integration (list, search, filter)
+- ✅ TemplateBuilderPage with form validation and submission
+- ✅ Delete functionality with confirmation
+- ✅ Loading states and error handling
+- ✅ Live WhatsApp preview with variable substitution
+
 **Key Features:**
 - Template status tracking (DRAFT → PENDING → APPROVED/REJECTED)
 - Automated submission to Meta Graph API upon creation
@@ -40,6 +47,13 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - ✅ Check connection status
 - ✅ Test connection endpoint
 
+### Connection Frontend Integration ✅
+- ✅ ConnectionPage with status display
+- ✅ Save/update credentials with form validation
+- ✅ Test connection functionality
+- ✅ Delete connection capability
+- ✅ Real-time status indicators (Active/Inactive, Connected/Failed)
+
 **Key Features:**
 - Secure storage of access tokens (encrypted at rest)
 - Connection status tracking
@@ -47,13 +61,16 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 
 **Deliverables:**
 - ✅ Templates API fully functional
-- ✅ Connection skeleton working
+- ✅ Templates Frontend integration (list, create, delete with loading states)
+- ✅ Connection API fully functional  
+- ✅ Connection Frontend integration (status, save, test, delete)
 - ✅ Meta API integration framework ready
 - ✅ AES-256 encryption for access tokens
 - ✅ R2DBC repositories with PostgreSQL
 - ✅ All endpoints compile and pass Maven build
+- ✅ Frontend TypeScript types aligned with backend DTOs
 
-**Date Completed:** April 8, 2026
+**Date Completed:** April 10, 2026 (Frontend integration completed)
 
 ---
 
@@ -61,10 +78,17 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 
 **Objective:** Enable contact management for campaign audiences.
 
-### Contacts (3 endpoints)
+### Backend (3 endpoints)
 - Create contact
 - List contacts with search
 - Get contact details
+
+### Frontend Integration Required
+- ContactsPage with real API integration
+- Contact creation form
+- Search and filter functionality
+- Loading states and error handling
+- Integration with CampaignBuilderPage for audience selection
 
 **Key Features:**
 - E.164 phone number format validation
@@ -74,6 +98,7 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 
 **Deliverables:**
 - Contacts API functional
+- Contacts Frontend integration
 - Database schema for contacts
 - Integration with campaign audience selection
 
@@ -83,11 +108,27 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 
 **Objective:** Enable campaign creation, scheduling, and execution with rate limiting.
 
-### Campaigns (4 endpoints)
+### Backend - Campaigns (4 endpoints)
 - Create campaign with scheduling
 - List campaigns
 - Get campaign details
 - Delete/cancel campaign
+
+### Frontend - Campaigns Integration Required
+- CampaignsPage with real API integration
+- CampaignBuilderPage with template and contact selection
+- Schedule picker (immediate vs future date)
+- Campaign status tracking display
+- Cancel/delete campaign functionality
+
+### Backend - Dashboard (1 endpoint)
+- Get dashboard statistics
+
+### Frontend - Dashboard Integration Required
+- Dashboard metrics display
+- Real-time statistics updates
+- Campaign performance charts
+- Next upcoming campaign countdown
 
 **Key Features:**
 - Persistent scheduling with Quartz
@@ -97,19 +138,48 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - Rate limiting for Meta API calls (respect Meta's 100 msg/sec limit)
 - Support for media message campaigns (file attachments)
 
-### Dashboard (1 endpoint)
-- Get dashboard statistics
-
-**Key Features:**
+**Dashboard Key Features:**
 - Total messages sent
 - Active scheduled campaigns count
 - Next upcoming campaign timer
 
 **Deliverables:**
-- Full campaign lifecycle working
+- Full campaign lifecycle working (Backend + Frontend)
+- Dashboard metrics available (Backend + Frontend)
 - Quartz jobs persistent across restarts
 - Rate limiting implemented
-- Dashboard metrics available
+
+---
+
+## Frontend Integration Checklist by Phase
+
+### Phase 1 ✅ COMPLETED
+- [x] Templates API service
+- [x] Connection API service
+- [x] TypeScript types aligned with backend
+- [x] TemplatesPage with API integration
+- [x] TemplateBuilderPage with API integration
+- [x] ConnectionPage with API integration
+- [x] Loading states and error handling
+
+### Phase 2 (Contacts)
+- [ ] Contacts API service
+- [ ] Contact TypeScript types
+- [ ] ContactsPage API integration
+- [ ] Contact creation modal/form
+- [ ] Search and filter implementation
+- [ ] Loading states and error handling
+- [ ] Integration with CampaignBuilderPage
+
+### Phase 3 (Campaigns + Dashboard)
+- [ ] Campaigns API service
+- [ ] Campaign TypeScript types
+- [ ] CampaignsPage API integration
+- [ ] CampaignBuilderPage API integration (template/contact selection)
+- [ ] Dashboard API service
+- [ ] DashboardPage API integration
+- [ ] Campaign status tracking display
+- [ ] Loading states and error handling
 
 ---
 
@@ -139,6 +209,13 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - File upload and storage mechanism
 - Meta media message API integration
 
+### Frontend Architecture
+- React with TypeScript
+- Tailwind CSS for styling
+- shadcn/ui component library
+- React Query for server state management (future consideration)
+- Real-time UI updates for campaign status
+
 ---
 
 ## Post-MVP Features (Not Included)
@@ -151,6 +228,7 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - Bulk contact import (CSV)
 - User notifications
 - Advanced analytics dashboard
+- React Query integration for caching
 
 ---
 
@@ -159,6 +237,8 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - [x] User can create a template with media and submit to Meta
 - [x] Template status updates correctly (manual refresh)
 - [x] User can add WhatsApp API credentials
+- [x] Frontend displays templates from backend API
+- [x] Frontend can create templates via API
 - [ ] User can create contacts
 - [ ] User can schedule a campaign for future delivery
 - [ ] Campaign automatically sends at scheduled time
@@ -182,6 +262,9 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 **Risk:** Job scheduling failures
 - **Mitigation:** Quartz persistent store, job recovery mechanisms
 
+**Risk:** Frontend-backend type mismatches
+- **Mitigation:** Shared OpenAPI spec, TypeScript types aligned with DTOs
+
 ---
 
 ## Notes
@@ -191,9 +274,10 @@ This document outlines the implementation plan for the Base Messages MVP, focusi
 - Rate limiting is essential for production use
 - Campaign analytics may be added post-MVP if time permits
 - Focus on core messaging flow first, polish later
+- Frontend integration must follow immediately after backend completion for each phase
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** April 8, 2026 (Phase 1 completed)
+**Document Version:** 1.1
+**Last Updated:** April 10, 2026 (Phase 1 Frontend integration completed)
 **Owner:** Development Team

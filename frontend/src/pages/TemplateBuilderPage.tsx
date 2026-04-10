@@ -1,22 +1,85 @@
-import React from 'react';
-import { ArrowLeft, Edit3, Route, Image, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { createTemplate } from '@/api/templates';
+import type { CreateTemplateRequest, TemplateCategory } from '@/api/types';
 import { PageId } from '../components/Layout';
 
-export default function TemplateBuilderPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+interface TemplateBuilderPageProps {
+  onNavigate: (page: PageId) => void;
+}
+
+export default function TemplateBuilderPage({ onNavigate }: TemplateBuilderPageProps) {
+  const [formData, setFormData] = useState<CreateTemplateRequest>({
+    name: '',
+    category: 'MARKETING',
+    content: '',
+    language: 'en_US',
+    variables: [],
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      await createTemplate(formData);
+      onNavigate('submission-sent');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create template');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleContentChange = (content: string) => {
+    setFormData({ ...formData, content });
+    // Update preview by replacing variables with example values
+    let previewText = content;
+    const variableMatches = content.match(/\{\{(\d+)\}\}/g) || [];
+    const uniqueVars = [...new Set(variableMatches)];
+
+    // Build variables array from detected placeholders
+    const variables = uniqueVars.map((match, index) => ({
+      example: `[Variable ${index + 1}]`,
+    }));
+
+    setFormData(prev => ({ ...prev, content, variables }));
+
+    // Generate preview
+    uniqueVars.forEach((match, index) => {
+      previewText = previewText.replace(
+        new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+        `[Value ${index + 1}]`
+      );
+    });
+    setPreview(previewText);
+  };
+
+  const insertVariable = () => {
+    const currentVars = formData.content.match(/\{\{(\d+)\}\}/g) || [];
+    const nextVarNum = currentVars.length + 1;
+    const newContent = formData.content + `{{${nextVarNum}}}`;
+    handleContentChange(newContent);
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-12">
       {/* Left Panel: Configuration */}
       <div className="flex-1 max-w-2xl space-y-10">
         <header>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={() => onNavigate('templates')}
             className="flex items-center gap-2 text-primary font-bold text-sm mb-4 hover:gap-3 transition-all p-0 h-auto"
           >
@@ -27,29 +90,42 @@ export default function TemplateBuilderPage({ onNavigate }: { onNavigate: (page:
           <p className="text-muted-foreground text-lg">Design and configure your message template for Meta API delivery.</p>
         </header>
 
-        <div className="space-y-8">
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-8">
           {/* Identity Section */}
           <Card className="bg-muted/30 border-none rounded-[2rem] p-4">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-3">
                   <Label className="technical-label">Template Name</Label>
-                  <Input 
-                    type="text" 
-                    defaultValue="welcome_series_q4"
+                  <Input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. welcome_series_q4"
                     className="bg-background border-none h-12 px-4 rounded-xl font-bold focus-visible:ring-primary"
+                    required
                   />
                 </div>
                 <div className="space-y-3">
                   <Label className="technical-label">Category</Label>
-                  <Select defaultValue="Marketing">
+                  <Select
+                    value={formData.category}
+                    onValueChange={(value) => setFormData({ ...formData, category: value as TemplateCategory })}
+                  >
                     <SelectTrigger className="bg-background border-none h-12 px-4 rounded-xl font-bold focus:ring-primary">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Marketing">Marketing</SelectItem>
-                      <SelectItem value="Utility">Utility</SelectItem>
-                      <SelectItem value="Authentication">Authentication</SelectItem>
+                      <SelectItem value="MARKETING">Marketing</SelectItem>
+                      <SelectItem value="UTILITY">Utility</SelectItem>
+                      <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -62,44 +138,65 @@ export default function TemplateBuilderPage({ onNavigate }: { onNavigate: (page:
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <Label className="technical-label">Message Content</Label>
               <div className="flex gap-2">
-                <Button variant="secondary" size="sm" className="h-7 px-3 text-[10px] font-bold rounded-lg">Add {"{{Variable}}"}</Button>
-                <Button variant="secondary" size="sm" className="h-7 px-3 text-[10px] font-bold rounded-lg">Emoji</Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={insertVariable}
+                  className="h-7 px-3 text-[10px] font-bold rounded-lg"
+                >
+                  Add Variable
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <Textarea 
+              <Textarea
                 rows={8}
+                value={formData.content}
+                onChange={(e) => handleContentChange(e.target.value)}
+                placeholder="Enter your message content here..."
                 className="bg-background border-none rounded-2xl p-6 text-sm leading-relaxed focus-visible:ring-primary resize-none font-medium min-h-[200px]"
-                defaultValue={`Hello {{1}}! 👋
-
-Thank you for choosing Sapphire Logic. Your order {{2}} has been confirmed and is being prepared for shipment.
-
-Track your progress here: https://sapphire.log/track/{{2}}
-
-Have a wonderful day!`}
+                required
               />
               <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/10">
                 <Info className="text-primary mt-0.5" size={18} />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Use <code className="bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">{"{{1}}"}</code>, <code className="bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">{"{{2}}"}</code> for dynamic variables. Make sure to map these in the next step.
+                  Use <code className="bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">{'{{1}}'}</code>,
+                  <code className="bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">{'{{2}}'}</code>
+                  for dynamic variables. These will be replaced when sending messages.
                 </p>
               </div>
             </CardContent>
           </Card>
 
           <div className="flex items-center justify-end gap-4 pt-4">
-            <Button variant="secondary" className="h-14 px-8 font-bold rounded-xl active:scale-95">
-              Save Draft
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => onNavigate('templates')}
+              className="h-14 px-8 font-bold rounded-xl active:scale-95"
+            >
+              Cancel
             </Button>
-            <Button 
-              onClick={() => onNavigate('submission-sent')}
+            <Button
+              type="submit"
+              disabled={loading}
               className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95"
             >
-              Submit for Meta Approval
-              <Send size={18} />
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  Submit for Meta Approval
+                  <Send size={18} />
+                </>
+              )}
             </Button>
           </div>
-        </div>
+        </form>
       </div>
 
       {/* Right Panel: Preview */}
@@ -122,9 +219,9 @@ Have a wonderful day!`}
               <div className="bg-[#075e54] text-white p-3 pt-4 flex items-center gap-3">
                 <ArrowLeft size={20} />
                 <div className="w-8 h-8 rounded-full bg-slate-300 overflow-hidden border border-white/20">
-                  <img 
-                    src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&w=100&h=100&q=80" 
-                    alt="Business Logo" 
+                  <img
+                    src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&w=100&h=100&q=80"
+                    alt="Business Logo"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -144,16 +241,13 @@ Have a wonderful day!`}
                 <div className="flex justify-center">
                   <span className="bg-[#d1eaef] text-[10px] px-3 py-1 rounded-lg text-slate-600 font-bold uppercase tracking-wider">Today</span>
                 </div>
-                
+
                 <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[90%] relative">
-                  <p className="text-[11px] text-slate-800 leading-relaxed">
-                    Hello <span className="text-blue-600 font-bold">[Customer Name]</span>! 👋<br/><br/>
-                    Thank you for choosing Sapphire Logic. Your order <span className="text-blue-600 font-bold">#SL-2024-001</span> has been confirmed and is being prepared for shipment.<br/><br/>
-                    Track your progress here: <span className="text-blue-600 underline">https://sapphire.log/track/SL-2024-001</span><br/><br/>
-                    Have a wonderful day!
+                  <p className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
+                    {preview || 'Your message preview will appear here...'}
                   </p>
                   <div className="flex justify-end items-center gap-1 mt-1 opacity-40">
-                    <span className="text-[8px]">14:32</span>
+                    <span className="text-[8px]">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     <CheckCircle2 size={10} />
                   </div>
                 </div>
@@ -189,8 +283,12 @@ Have a wonderful day!`}
                 No prohibited content detected
               </div>
               <div className="flex items-center gap-3 text-[11px] font-bold text-foreground">
-                <AlertTriangle size={14} className="text-amber-500" />
-                Dynamic link requires approval
+                {formData.content.length > 0 ? (
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                ) : (
+                  <AlertTriangle size={14} className="text-amber-500" />
+                )}
+                Content provided
               </div>
             </CardContent>
           </Card>
