@@ -23,8 +23,8 @@ public class MetaApiClient {
     @Value("${meta.api.base-url:https://graph.facebook.com/v18.0}")
     private String baseUrl;
 
-    public MetaApiClient(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder
+    public MetaApiClient() {
+        this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
