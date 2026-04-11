@@ -75,16 +75,9 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
         if (template.getId() == null) {
             return insertNewTemplate(template);
         }
-        
-        // For existing templates, use the standard save
-        TemplateEntity entity = toEntity(template);
-        
-        if (entity.getCreatedAt() == null) {
-            entity.setCreatedAt(LocalDateTime.now());
-        }
-        entity.setUpdatedAt(LocalDateTime.now());
-        
-        return templateRepository.save(entity)
+
+        // For existing templates, use native SQL with explicit enum casting
+        return updateExistingTemplate(template)
                 .flatMap(savedEntity -> {
                     // Save variables if present
                     if (template.getVariables() != null && !template.getVariables().isEmpty()) {
@@ -96,14 +89,54 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                 .flatMap(this::enrichWithVariables);
     }
 
+    private Mono<TemplateEntity> updateExistingTemplate(Template template) {
+        String category = template.getCategory() != null
+            ? toDatabaseCategory(template.getCategory())
+            : toDatabaseCategory(Template.TemplateCategory.MARKETING);
+        String status = template.getStatus() != null
+            ? template.getStatus().name()
+            : Template.TemplateStatus.DRAFT.name();
+        String language = template.getLanguage() != null
+            ? template.getLanguage().name()
+            : "EN_US";
+        LocalDateTime now = LocalDateTime.now();
+
+        return databaseClient.sql("UPDATE templates SET name = :name, category = CAST(:category AS template_category), " +
+                "language = :language, status = CAST(:status AS template_status), content = :content, " +
+                "rejection_reason = :rejectionReason, updated_at = :updatedAt WHERE id = :id " +
+                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, created_at, updated_at")
+                .bind("id", template.getId())
+                .bind("name", template.getName())
+                .bind("category", category)
+                .bind("language", language)
+                .bind("status", status)
+                .bind("content", template.getContent())
+                .bind("rejectionReason", template.getRejectionReason() != null ? template.getRejectionReason() : "")
+                .bind("updatedAt", now)
+                .map((row, metadata) -> {
+                    TemplateEntity entity = new TemplateEntity();
+                    entity.setId(row.get("id", Long.class));
+                    entity.setName(row.get("name", String.class));
+                    entity.setCategory(row.get("category", String.class));
+                    entity.setLanguage(row.get("language", String.class));
+                    entity.setStatus(row.get("status", String.class));
+                    entity.setContent(row.get("content", String.class));
+                    entity.setRejectionReason(row.get("rejection_reason", String.class));
+                    entity.setCreatedAt(row.get("created_at", LocalDateTime.class));
+                    entity.setUpdatedAt(row.get("updated_at", LocalDateTime.class));
+                    return entity;
+                })
+                .one();
+    }
+
     private Mono<Template> insertNewTemplate(Template template) {
-        // Convert domain enum names to database enum values (title case)
-        String category = template.getCategory() != null 
-            ? toTitleCase(template.getCategory().name()) 
-            : "Marketing";
+        // template_category enum values are TitleCase in this database
+        String category = template.getCategory() != null
+            ? toDatabaseCategory(template.getCategory())
+            : toDatabaseCategory(Template.TemplateCategory.MARKETING);
         String status = template.getStatus() != null 
-            ? toTitleCase(template.getStatus().name()) 
-            : "Draft";
+            ? template.getStatus().name() 
+            : Template.TemplateStatus.DRAFT.name();
         String language = template.getLanguage() != null 
             ? template.getLanguage().name() 
             : "EN_US";
@@ -180,25 +213,9 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                 .then();
     }
 
-    private TemplateEntity toEntity(Template template) {
-        TemplateEntity entity = new TemplateEntity();
-        entity.setId(template.getId());
-        entity.setName(template.getName());
-        entity.setCategory(template.getCategory() != null ? template.getCategory().name() : null);
-        entity.setLanguage(template.getLanguage() != null ? template.getLanguage().name() : null);
-        entity.setStatus(template.getStatus() != null ? template.getStatus().name() : Template.TemplateStatus.DRAFT.name());
-        entity.setContent(template.getContent());
-        entity.setRejectionReason(template.getRejectionReason());
-        entity.setCreatedAt(template.getCreatedAt());
-        entity.setUpdatedAt(template.getUpdatedAt());
-        return entity;
+    private String toDatabaseCategory(Template.TemplateCategory category) {
+        String value = category.name().toLowerCase();
+        return value.substring(0, 1).toUpperCase() + value.substring(1);
     }
 
-    private String toTitleCase(String input) {
-        if (input == null || input.isEmpty()) {
-            return input;
-        }
-        // Convert "MARKETING" to "Marketing", "AUTHENTICATION" to "Authentication", etc.
-        return input.substring(0, 1).toUpperCase() + input.substring(1).toLowerCase();
-    }
 }

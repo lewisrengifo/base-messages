@@ -13,9 +13,10 @@ import { PageId } from '../components/Layout';
 
 interface TemplateBuilderPageProps {
   onNavigate: (page: PageId) => void;
+  onTemplateSubmitted: (templateName: string) => void;
 }
 
-export default function TemplateBuilderPage({ onNavigate }: TemplateBuilderPageProps) {
+export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }: TemplateBuilderPageProps) {
   const [formData, setFormData] = useState<CreateTemplateRequest>({
     name: '',
     category: 'Marketing',
@@ -33,7 +34,8 @@ export default function TemplateBuilderPage({ onNavigate }: TemplateBuilderPageP
     setError(null);
 
     try {
-      await createTemplate(formData);
+      const createdTemplate = await createTemplate(formData);
+      onTemplateSubmitted(createdTemplate.name || formData.name);
       onNavigate('submission-sent');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create template');

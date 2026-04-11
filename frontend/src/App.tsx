@@ -23,6 +23,7 @@ export default function App() {
 
 function AppContent() {
   const [activePage, setActivePage] = useState<PageId>('campaigns');
+  const [lastSubmittedTemplateName, setLastSubmittedTemplateName] = useState<string>('');
 
   const renderPage = () => {
     switch (activePage) {
@@ -35,7 +36,12 @@ function AppContent() {
       case 'campaigns':
         return <CampaignsPage onNavigate={setActivePage} />;
       case 'template-builder':
-        return <TemplateBuilderPage onNavigate={setActivePage} />;
+        return (
+          <TemplateBuilderPage
+            onNavigate={setActivePage}
+            onTemplateSubmitted={setLastSubmittedTemplateName}
+          />
+        );
       case 'campaign-builder':
         return <CampaignBuilderPage onNavigate={setActivePage} />;
       case 'campaign-analytics':
@@ -43,7 +49,13 @@ function AppContent() {
       case 'campaign-sent':
         return <CampaignSentPage onBack={() => setActivePage('campaigns')} onNavigate={setActivePage} />;
       case 'submission-sent':
-        return <SubmissionSentPage onBack={() => setActivePage('templates')} onNavigate={setActivePage} />;
+        return (
+          <SubmissionSentPage
+            onBack={() => setActivePage('templates')}
+            onNavigate={setActivePage}
+            templateName={lastSubmittedTemplateName}
+          />
+        );
       default:
         return <CampaignsPage onNavigate={setActivePage} />;
     }
@@ -137,7 +149,7 @@ function CampaignSentPage({ onBack, onNavigate }: { onBack: () => void, onNaviga
   );
 }
 
-function SubmissionSentPage({ onBack, onNavigate }: { onBack: () => void, onNavigate: (page: PageId) => void }) {
+function SubmissionSentPage({ onBack, onNavigate, templateName }: { onBack: () => void, onNavigate: (page: PageId) => void, templateName?: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-12">
       <div className="relative">
@@ -150,7 +162,7 @@ function SubmissionSentPage({ onBack, onNavigate }: { onBack: () => void, onNavi
       <div className="max-w-xl space-y-4">
         <h1 className="text-4xl font-extrabold tracking-tight">Submission Sent</h1>
         <p className="text-muted-foreground text-lg">
-          Your template <span className="font-bold text-primary">[Template Name]</span> has been sent to Meta for approval. This usually takes 24-48 hours.
+          Your template <span className="font-bold text-primary">{templateName || 'your template'}</span> has been sent to Meta for approval. This usually takes 24-48 hours.
         </p>
       </div>
 
