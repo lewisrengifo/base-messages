@@ -1,16 +1,53 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Megaphone, Users, FileText, Calendar, Send, CheckCircle2, Search, ChevronRight } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Megaphone, Users, FileText, Calendar, Send, CheckCircle2, Search, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PageId } from '../components/Layout';
+import { listContacts } from '@/api/contacts';
+import type { Contact } from '@/api/types';
 
 export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const [step, setStep] = useState(1);
+
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+  const [audienceType, setAudienceType] = useState<'all' | 'manual'>('all');
+  const [selectedContactIds, setSelectedContactIds] = useState<number[]>([]);
+  const [audienceSearch, setAudienceSearch] = useState('');
+
+  useEffect(() => {
+    const fetchContacts = async () => {
+      setContactsLoading(true);
+      setContactsError(null);
+      try {
+        const response = await listContacts({ limit: 200 });
+        setContacts(response.data);
+      } catch (err) {
+        setContactsError(err instanceof Error ? err.message : 'Failed to load contacts');
+      } finally {
+        setContactsLoading(false);
+      }
+    };
+
+    fetchContacts();
+  }, []);
+
+  const filteredContacts = useMemo(() => {
+    const query = audienceSearch.trim().toLowerCase();
+    if (!query) return contacts;
+    return contacts.filter((contact) =>
+      contact.name.toLowerCase().includes(query) || contact.phone.includes(query)
+    );
+  }, [contacts, audienceSearch]);
+
+  const recipientCount = audienceType === 'all' ? contacts.length : selectedContactIds.length;
 
   const steps = [
     { id: 1, label: 'Template Selection', icon: FileText },
@@ -21,8 +58,8 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
   return (
     <div className="space-y-12">
       <header>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           onClick={() => onNavigate('campaigns')}
           className="flex items-center gap-2 text-primary font-bold text-sm mb-4 hover:gap-3 transition-all p-0 h-auto"
         >
@@ -40,20 +77,21 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
         </p>
       </header>
 
-      {/* Progress Stepper */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {steps.map((s) => (
-          <div 
+          <div
             key={s.id}
             className={cn(
-              "flex items-center gap-4 p-4 rounded-2xl border-2 transition-all",
-              step === s.id ? "border-primary bg-primary/5 shadow-lg shadow-primary/5" : "border-muted bg-muted/30 opacity-60"
+              'flex items-center gap-4 p-4 rounded-2xl border-2 transition-all',
+              step === s.id ? 'border-primary bg-primary/5 shadow-lg shadow-primary/5' : 'border-muted bg-muted/30 opacity-60'
             )}
           >
-            <div className={cn(
-              "h-10 w-10 rounded-xl flex items-center justify-center transition-colors",
-              step === s.id ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
-            )}>
+            <div
+              className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
+                step === s.id ? 'bg-primary text-primary-foreground' : 'bg-muted-foreground/20 text-muted-foreground'
+              )}
+            >
               <s.icon size={20} />
             </div>
             <div>
@@ -77,15 +115,15 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
               <CardContent className="p-8 space-y-6">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                  <Input 
-                    placeholder="Search templates..." 
+                  <Input
+                    placeholder="Search templates..."
                     className="pl-12 h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20"
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {['Order Confirmation', 'Marketing Sale', '2FA Login'].map((t) => (
-                    <div 
+                    <div
                       key={t}
                       className="p-6 rounded-2xl border-2 border-muted hover:border-primary/40 cursor-pointer transition-all group bg-muted/10"
                     >
@@ -111,19 +149,75 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-8 space-y-6">
+                {contactsError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{contactsError}</AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4">
-                  <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Select Contact Group</Label>
-                  <Select>
+                  <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Audience Mode</Label>
+                  <Select value={audienceType} onValueChange={(value) => setAudienceType(value as 'all' | 'manual')}>
                     <SelectTrigger className="h-14 rounded-2xl bg-muted/30 border-none focus:ring-primary/20">
-                      <SelectValue placeholder="Choose a segment..." />
+                      <SelectValue placeholder="Choose audience mode..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Contacts (2,450)</SelectItem>
-                      <SelectItem value="vip">VIP Customers (124)</SelectItem>
-                      <SelectItem value="new">New Customers (450)</SelectItem>
+                      <SelectItem value="all">All Contacts ({contacts.length})</SelectItem>
+                      <SelectItem value="manual">Manual Selection</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {audienceType === 'manual' && (
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60" size={16} />
+                      <Input
+                        value={audienceSearch}
+                        onChange={(e) => setAudienceSearch(e.target.value)}
+                        placeholder="Filter contacts by name or phone..."
+                        className="pl-10 h-11 rounded-xl bg-muted/30 border-none"
+                      />
+                    </div>
+
+                    <div className="border rounded-2xl bg-muted/10 max-h-72 overflow-y-auto divide-y">
+                      {contactsLoading ? (
+                        <div className="p-8 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                      ) : filteredContacts.length === 0 ? (
+                        <div className="p-8 text-sm text-center text-muted-foreground">No contacts found.</div>
+                      ) : (
+                        filteredContacts.map((contact) => {
+                          const checked = selectedContactIds.includes(contact.id);
+                          return (
+                            <label
+                              key={contact.id}
+                              className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedContactIds((prev) => [...prev, contact.id]);
+                                  } else {
+                                    setSelectedContactIds((prev) => prev.filter((id) => id !== contact.id));
+                                  }
+                                }}
+                              />
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">{contact.name}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{contact.phone}</p>
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-6 rounded-2xl bg-primary/5 border-2 border-primary/10 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -131,11 +225,15 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                       <Users size={20} />
                     </div>
                     <div>
-                      <p className="font-bold">2,450 Recipients</p>
-                      <p className="text-xs text-muted-foreground">Estimated delivery: 15 minutes</p>
+                      <p className="font-bold">{recipientCount.toLocaleString()} Recipients</p>
+                      <p className="text-xs text-muted-foreground">Estimated delivery: {Math.max(1, Math.ceil(recipientCount / 160))} minutes</p>
                     </div>
                   </div>
-                  <Button variant="ghost" className="text-primary font-bold">Edit Segment</Button>
+                  {audienceType === 'manual' && (
+                    <Button variant="ghost" className="text-primary font-bold" onClick={() => setSelectedContactIds([])}>
+                      Clear Selection
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -177,8 +275,8 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
           )}
 
           <div className="flex items-center justify-between pt-8">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               disabled={step === 1}
               onClick={() => setStep(s => s - 1)}
               className="h-14 px-8 font-bold rounded-xl active:scale-95"
@@ -186,7 +284,7 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
               Previous Step
             </Button>
             {step < 3 ? (
-              <Button 
+              <Button
                 onClick={() => setStep(s => s + 1)}
                 className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95"
               >
@@ -194,7 +292,7 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 <ChevronRight size={18} />
               </Button>
             ) : (
-              <Button 
+              <Button
                 onClick={() => onNavigate('campaign-sent')}
                 className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95 bg-emerald-600 hover:bg-emerald-700"
               >
@@ -218,22 +316,22 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Audience</span>
-                  <span className="font-bold">{step > 2 ? 'All Contacts' : 'Not selected'}</span>
+                  <span className="font-bold">{step > 2 ? (audienceType === 'all' ? 'All Contacts' : 'Manual Selection') : 'Not selected'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Recipients</span>
-                  <span className="font-bold">{step > 2 ? '2,450' : '-'}</span>
+                  <span className="font-bold">{step > 1 ? recipientCount.toLocaleString() : '-'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Schedule</span>
                   <span className="font-bold">{step === 3 ? 'Immediate' : 'Not set'}</span>
                 </div>
               </div>
-              
+
               <div className="pt-6 border-t">
                 <div className="bg-primary/5 p-4 rounded-xl space-y-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Estimated Cost</p>
-                  <p className="text-2xl font-extrabold">$12.25</p>
+                  <p className="text-2xl font-extrabold">${(recipientCount * 0.005).toFixed(2)}</p>
                   <p className="text-[10px] text-muted-foreground leading-tight">Based on Meta API standard rates for North America.</p>
                 </div>
               </div>

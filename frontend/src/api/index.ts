@@ -11,6 +11,7 @@ export { apiClient, ApiClientError } from './client';
 export * from './templates';
 export * from './connection';
 export * from './auth';
+export * from './contacts';
 
 // Types
 export * from './types';

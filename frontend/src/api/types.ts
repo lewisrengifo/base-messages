@@ -174,11 +174,20 @@ export interface Contact {
   id: number;
   name: string;
   phone: string;
-  email?: string;
   initials: string;
   color: string;
   createdAt: string;
-  updatedAt: string;
+}
+
+export interface ContactDetail extends Contact {
+  email?: string;
+  groups?: string[];
+  messageHistory?: Array<{
+    campaignId?: string;
+    campaignName?: string;
+    sentAt?: string;
+    status?: string;
+  }>;
 }
 
 export interface ContactListResponse {
