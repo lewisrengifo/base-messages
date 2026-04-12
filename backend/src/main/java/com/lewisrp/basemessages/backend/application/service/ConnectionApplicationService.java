@@ -4,14 +4,12 @@ import com.lewisrp.basemessages.backend.application.dto.ConnectionCommand;
 import com.lewisrp.basemessages.backend.application.dto.ConnectionStatusDto;
 import com.lewisrp.basemessages.backend.application.port.outbound.ConnectionRepositoryPort;
 import com.lewisrp.basemessages.backend.domain.model.Connection;
-import com.lewisrp.basemessages.backend.infrastructure.adapter.external.MetaApiClient;
-import com.lewisrp.basemessages.backend.infrastructure.adapter.security.EncryptionService;
+import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient;
+import com.lewisrp.basemessages.backend.adapter.security.EncryptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-
-import java.time.LocalDateTime;
 
 /**
  * Application service for connection management.

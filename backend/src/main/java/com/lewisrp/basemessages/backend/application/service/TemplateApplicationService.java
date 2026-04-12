@@ -5,7 +5,7 @@ import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
 import com.lewisrp.basemessages.backend.application.port.outbound.TemplateRepositoryPort;
 import com.lewisrp.basemessages.backend.domain.model.Template;
 import com.lewisrp.basemessages.backend.domain.model.TemplateVariable;
-import com.lewisrp.basemessages.backend.infrastructure.adapter.external.MetaApiClient;
+import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
