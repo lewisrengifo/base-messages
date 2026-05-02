@@ -20,10 +20,7 @@ public class MetaApiClient {
 
     private final WebClient webClient;
 
-    @Value("${meta.api.base-url:https://graph.facebook.com/v18.0}")
-    private String baseUrl;
-
-    public MetaApiClient() {
+    public MetaApiClient(@Value("${meta.api.base-url:https://graph.facebook.com/v22.0}") String baseUrl) {
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -119,10 +116,17 @@ public class MetaApiClient {
      * @param accessToken Access token
      * @return true if connection is valid
      */
-    public Mono<Boolean> testConnection(String accessToken) {
+    public Mono<Boolean> testConnection(String wabaId, String phoneNumberId, String accessToken) {
+        String targetId = (wabaId != null && !wabaId.isBlank()) ? wabaId : phoneNumberId;
+        if (targetId == null || targetId.isBlank()) {
+            log.error("Connection test failed: missing WABA ID or phone number ID");
+            return Mono.just(false);
+        }
+
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/me")
+                        .path("/" + targetId)
+                        .queryParam("fields", "id")
                         .queryParam("access_token", accessToken)
                         .build())
                 .retrieve()

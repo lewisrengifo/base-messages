@@ -50,7 +50,10 @@ public class ConnectionApplicationService {
                 .build();
 
         // Test connection with Meta
-        return metaApiClient.testConnection(command.getAccessToken())
+        return metaApiClient.testConnection(
+                        command.getWabaId(),
+                        command.getPhoneNumberId(),
+                        command.getAccessToken())
                 .flatMap(isValid -> {
                     if (isValid) {
                         connection.setStatus(Connection.ConnectionStatus.ACTIVE);
@@ -71,7 +74,10 @@ public class ConnectionApplicationService {
         return connectionRepository.findCurrent()
                 .flatMap(conn -> {
                     String decryptedToken = encryptionService.decrypt(conn.getAccessToken());
-                    return metaApiClient.testConnection(decryptedToken);
+                    return metaApiClient.testConnection(
+                            conn.getWabaId(),
+                            conn.getPhoneNumberId(),
+                            decryptedToken);
                 })
                 .defaultIfEmpty(false);
     }
