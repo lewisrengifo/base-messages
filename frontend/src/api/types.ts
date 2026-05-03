@@ -113,8 +113,8 @@ export interface CreateTemplateVariable {
 // Connection Types
 // ============================================================================
 
-export type ConnectionStatusEnum = 'ACTIVE' | 'INACTIVE' | 'ERROR';
-export type EndpointConnectivityEnum = 'CONNECTED' | 'FAILED';
+export type ConnectionStatusEnum = 'active' | 'inactive' | 'error';
+export type EndpointConnectivityEnum = 'connected' | 'failed';
 
 export interface ConnectionStatus {
   status: ConnectionStatusEnum;

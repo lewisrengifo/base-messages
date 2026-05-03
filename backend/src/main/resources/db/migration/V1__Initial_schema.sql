@@ -2,7 +2,7 @@
 -- Phase 2: Templates, Connection, and Contacts
 
 -- Templates table
-CREATE TABLE IF NOT EXISTS templates (
+CREATE TABLE templates (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     category VARCHAR(50) NOT NULL CHECK (category IN ('MARKETING', 'UTILITY', 'AUTHENTICATION')),
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS templates (
 );
 
 -- Template variables table
-CREATE TABLE IF NOT EXISTS template_variables (
+CREATE TABLE template_variables (
     id BIGSERIAL PRIMARY KEY,
     template_id BIGINT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     position INTEGER NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS template_variables (
 );
 
 -- Connections table (WhatsApp API credentials)
-CREATE TABLE IF NOT EXISTS connections (
+CREATE TABLE connections (
     id BIGSERIAL PRIMARY KEY,
     phone_number_id VARCHAR(255) NOT NULL,
     waba_id VARCHAR(255) NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS connections (
 );
 
 -- Contacts table
-CREATE TABLE IF NOT EXISTS contacts (
+CREATE TABLE contacts (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -51,12 +51,9 @@ CREATE TABLE IF NOT EXISTS contacts (
 );
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_templates_status ON templates(status);
-CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);
-CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(name);
-CREATE INDEX IF NOT EXISTS idx_template_variables_template_id ON template_variables(template_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
-
--- Migration: add meta_template_id column if it doesn't exist
-ALTER TABLE templates ADD COLUMN IF NOT EXISTS meta_template_id VARCHAR(255);
+CREATE INDEX idx_templates_status ON templates(status);
+CREATE INDEX idx_templates_category ON templates(category);
+CREATE INDEX idx_templates_name ON templates(name);
+CREATE INDEX idx_template_variables_template_id ON template_variables(template_id);
+CREATE INDEX idx_contacts_user_id ON contacts(user_id);
+CREATE INDEX idx_contacts_phone ON contacts(phone);

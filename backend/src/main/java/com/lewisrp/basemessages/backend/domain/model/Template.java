@@ -23,6 +23,7 @@ public class Template {
     private TemplateLanguage language;
     private TemplateStatus status;
     private String content;
+    private String metaTemplateId;
     private List<TemplateVariable> variables;
     private String rejectionReason;
     private LocalDateTime createdAt;

@@ -38,22 +38,37 @@ public class ConnectionApplicationService {
     public Mono<ConnectionStatusDto> saveConnection(ConnectionCommand command) {
         log.info("Saving connection for phone number: {}", command.getPhoneNumberId());
 
-        // Encrypt access token
-        String encryptedToken = encryptionService.encrypt(command.getAccessToken());
+        return connectionRepository.findCurrent()
+                .flatMap(existing -> {
+                    // Update existing connection
+                    existing.setPhoneNumberId(command.getPhoneNumberId());
+                    existing.setWabaId(command.getWabaId());
 
-        // Build connection model
-        Connection connection = Connection.builder()
-                .phoneNumberId(command.getPhoneNumberId())
-                .wabaId(command.getWabaId())
-                .accessToken(encryptedToken)
-                .status(Connection.ConnectionStatus.INACTIVE)
-                .build();
+                    String tokenForTest = command.getAccessToken();
+                    if (tokenForTest != null && !tokenForTest.isBlank()) {
+                        existing.setAccessToken(encryptionService.encrypt(tokenForTest));
+                    } else {
+                        // Use existing decrypted token for testing if no new token provided
+                        tokenForTest = encryptionService.decrypt(existing.getAccessToken());
+                    }
+                    existing.setStatus(Connection.ConnectionStatus.INACTIVE);
+                    return testAndSave(existing, command.getWabaId(), command.getPhoneNumberId(), tokenForTest);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    // Create new connection
+                    String encryptedToken = encryptionService.encrypt(command.getAccessToken());
+                    Connection connection = Connection.builder()
+                            .phoneNumberId(command.getPhoneNumberId())
+                            .wabaId(command.getWabaId())
+                            .accessToken(encryptedToken)
+                            .status(Connection.ConnectionStatus.INACTIVE)
+                            .build();
+                    return testAndSave(connection, command.getWabaId(), command.getPhoneNumberId(), command.getAccessToken());
+                }));
+    }
 
-        // Test connection with Meta
-        return metaApiClient.testConnection(
-                        command.getWabaId(),
-                        command.getPhoneNumberId(),
-                        command.getAccessToken())
+    private Mono<ConnectionStatusDto> testAndSave(Connection connection, String wabaId, String phoneNumberId, String accessToken) {
+        return metaApiClient.testConnection(wabaId, phoneNumberId, accessToken)
                 .flatMap(isValid -> {
                     if (isValid) {
                         connection.setStatus(Connection.ConnectionStatus.ACTIVE);
@@ -61,7 +76,6 @@ public class ConnectionApplicationService {
                     } else {
                         connection.setStatus(Connection.ConnectionStatus.ERROR);
                     }
-                    
                     return connectionRepository.save(connection);
                 })
                 .map(this::toStatusDto);

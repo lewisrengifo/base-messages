@@ -33,7 +33,6 @@ export default function ConnectionPage() {
     try {
       const response = await getConnectionStatus();
       setStatus(response);
-      // Pre-fill form if we have existing connection data
       if (response.phoneNumberId) {
         setFormData(prev => ({
           ...prev,
@@ -62,7 +61,6 @@ export default function ConnectionPage() {
       });
       setStatus(response);
       setSuccess('Connection saved successfully!');
-      // Clear the access token from the form for security
       setFormData(prev => ({ ...prev, accessToken: '' }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save connection');
@@ -111,8 +109,8 @@ export default function ConnectionPage() {
     }
   };
 
-  const isActive = status?.status === 'ACTIVE';
-  const isConnected = status?.endpointConnectivity === 'CONNECTED';
+  const isActive = status?.status === 'active';
+  const isConnected = status?.endpointConnectivity === 'connected';
 
   if (loading) {
     return (

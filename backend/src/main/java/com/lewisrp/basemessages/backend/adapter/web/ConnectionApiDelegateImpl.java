@@ -4,7 +4,6 @@ import com.lewisrp.basemessages.backend.application.dto.ConnectionCommand;
 import com.lewisrp.basemessages.backend.application.dto.ConnectionStatusDto;
 import com.lewisrp.basemessages.backend.application.service.ConnectionApplicationService;
 import org.openapitools.api.ConnectionApiDelegate;
-import org.openapitools.jackson.nullable.JsonNullable;
 import org.openapitools.model.ConnectionRequest;
 import org.openapitools.model.ConnectionStatus;
 import org.openapitools.model.ConnectionTestPost200Response;
@@ -97,9 +96,9 @@ public class ConnectionApiDelegateImpl implements ConnectionApiDelegate {
         status.setPhoneNumberId(dto.getPhoneNumberId());
         status.setWabaId(dto.getWabaId());
         
-        // Convert LocalDateTime to OffsetDateTime wrapped in JsonNullable
+        // Convert LocalDateTime to OffsetDateTime
         if (dto.getLastHeartbeatAt() != null) {
-            status.setLastHeartbeat(JsonNullable.of(dto.getLastHeartbeatAt().atOffset(ZoneOffset.UTC)));
+            status.setLastHeartbeat(dto.getLastHeartbeatAt().atOffset(ZoneOffset.UTC));
         }
         
         // Convert endpoint connectivity to enum

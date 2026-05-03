@@ -8,37 +8,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Client for Meta Graph API to submit templates and send messages.
- */
 @Component
 @Slf4j
 public class MetaApiClient {
 
     private final WebClient webClient;
 
-    public MetaApiClient(@Value("${meta.api.base-url:https://graph.facebook.com/v22.0}") String baseUrl) {
+    public MetaApiClient(@Value("${meta.api.base-url:https://graph.facebook.com/v25.0}") String baseUrl) {
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
 
-    /**
-     * Submit a template to Meta for approval.
-     *
-     * @param wabaId WhatsApp Business Account ID
-     * @param accessToken Access token for authentication
-     * @param name Template name
-     * @param category Template category (MARKETING, UTILITY, AUTHENTICATION)
-     * @param language Template language code
-     * @param content Template content with {{variables}}
-     * @param variables List of variable examples
-     * @return Template submission response with ID
-     */
     public Mono<SubmissionResult> submitTemplate(
             String wabaId,
             String accessToken,
@@ -50,59 +37,69 @@ public class MetaApiClient {
 
         String url = String.format("/%s/message_templates", wabaId);
 
-        // Build components array for the template
-        Map<String, Object> body = Map.of(
-                "name", name,
-                "category", category.toUpperCase(),
-                "language", language,
-                "components", List.of(Map.of(
-                        "type", "BODY",
-                        "text", content
-                ))
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", name);
+        body.put("category", category.toUpperCase());
+        body.put("language", language);
+
+        List<Map<String, Object>> components = new ArrayList<>();
+
+        // BODY component (required)
+        Map<String, Object> bodyComponent = new HashMap<>();
+        bodyComponent.put("type", "BODY");
+        bodyComponent.put("text", content);
+
+        if (variables != null && !variables.isEmpty()) {
+            List<Map<String, Object>> bodyExamples = new ArrayList<>();
+            List<String> exampleValues = variables.stream()
+                    .map(v -> v.getOrDefault("example", v.getOrDefault("text", "")))
+                    .toList();
+            bodyExamples.add(Map.of("body_text", exampleValues));
+            bodyComponent.put("examples", bodyExamples);
+        }
+
+        components.add(bodyComponent);
+        body.put("components", components);
 
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path(url)
-                        .queryParam("access_token", accessToken)
                         .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
                     log.info("Template submission successful: {}", response);
-                    return SubmissionResult.success(
-                            String.valueOf(response.get("id")),
-                            name
-                    );
+                    String metaId = response.get("id") != null ? String.valueOf(response.get("id")) : null;
+                    return SubmissionResult.success(metaId, name);
                 })
                 .onErrorResume(error -> {
                     log.error("Template submission failed: {}", error.getMessage(), error);
-                    return Mono.just(SubmissionResult.failure(error.getMessage()));
+                    String errorMessage = error.getMessage();
+                    if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException webEx) {
+                        String responseBody = webEx.getResponseBodyAsString();
+                        log.error("Meta API error response: {}", responseBody);
+                        errorMessage = responseBody;
+                    }
+                    return Mono.just(SubmissionResult.failure(errorMessage));
                 });
     }
 
-    /**
-     * Check template status by ID.
-     *
-     * @param templateId Meta template ID
-     * @param wabaId WhatsApp Business Account ID
-     * @param accessToken Access token
-     * @return Template status
-     */
     public Mono<String> getTemplateStatus(String templateId, String wabaId, String accessToken) {
-        String url = String.format("/%s/message_templates", wabaId);
+        String url = String.format("/%s", templateId);
 
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(url)
-                        .queryParam("access_token", accessToken)
+                        .queryParam("fields", "status")
                         .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
-                    // Parse status from response
-                    return "PENDING"; // Simplified for MVP
+                    Object status = response.get("status");
+                    return status != null ? status.toString() : "UNKNOWN";
                 })
                 .onErrorResume(error -> {
                     log.error("Failed to get template status: {}", error.getMessage());
@@ -110,12 +107,6 @@ public class MetaApiClient {
                 });
     }
 
-    /**
-     * Test connection to Meta API.
-     *
-     * @param accessToken Access token
-     * @return true if connection is valid
-     */
     public Mono<Boolean> testConnection(String wabaId, String phoneNumberId, String accessToken) {
         String targetId = (wabaId != null && !wabaId.isBlank()) ? wabaId : phoneNumberId;
         if (targetId == null || targetId.isBlank()) {
@@ -127,8 +118,8 @@ public class MetaApiClient {
                 .uri(uriBuilder -> uriBuilder
                         .path("/" + targetId)
                         .queryParam("fields", "id")
-                        .queryParam("access_token", accessToken)
                         .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> response.containsKey("id"))
@@ -138,17 +129,14 @@ public class MetaApiClient {
                 });
     }
 
-    /**
-     * Result of template submission.
-     */
     public record SubmissionResult(
             boolean success,
-            String templateId,
+            String metaTemplateId,
             String templateName,
             String errorMessage
     ) {
-        public static SubmissionResult success(String templateId, String templateName) {
-            return new SubmissionResult(true, templateId, templateName, null);
+        public static SubmissionResult success(String metaTemplateId, String templateName) {
+            return new SubmissionResult(true, metaTemplateId, templateName, null);
         }
 
         public static SubmissionResult failure(String errorMessage) {
