@@ -130,6 +130,19 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
     }
 
     @Override
+    public Mono<ResponseEntity<Template>> templatesIdRefreshStatusPost(Integer id, ServerWebExchange exchange) {
+        return templateService.refreshTemplateStatus(Long.valueOf(id))
+                .map(this::toApiModel)
+                .map(ResponseEntity::ok);
+    }
+
+    @Override
+    public Mono<ResponseEntity<Void>> templatesIdDelete(Integer id, ServerWebExchange exchange) {
+        return templateService.deleteTemplate(Long.valueOf(id))
+                .then(Mono.just(ResponseEntity.noContent().build()));
+    }
+
+    @Override
     public Mono<ResponseEntity<Template>> templatesIdPut(Integer id, Mono<UpdateTemplateRequest> updateTemplateRequest, ServerWebExchange exchange) {
         return updateTemplateRequest
                 .map(this::toUpdateCommand)

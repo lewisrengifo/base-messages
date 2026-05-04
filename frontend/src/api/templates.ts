@@ -64,6 +64,13 @@ export async function resubmitTemplate(id: number): Promise<Template> {
 }
 
 /**
+ * Refresh template status from Meta API
+ */
+export async function refreshTemplateStatus(id: number): Promise<Template> {
+  return apiClient.post<Template>(`${TEMPLATES_ENDPOINT}/${id}/refresh-status`, {});
+}
+
+/**
  * Delete a template
  */
 export async function deleteTemplate(id: number): Promise<void> {

@@ -21,6 +21,7 @@ import java.util.List;
 
 /**
  * Adapter implementing the TemplateRepositoryPort using R2DBC.
+ * All operations respect soft-delete (deleted_at IS NULL).
  */
 @Component
 @RequiredArgsConstructor
@@ -35,37 +36,38 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
 
     @Override
     public Flux<Template> findAll(Pageable pageable) {
-        return templateRepository.findAllBy(pageable)
+        return templateRepository.findAllActive(pageable)
                 .flatMap(this::enrichWithVariables);
     }
 
     @Override
     public Flux<Template> findByStatus(String status, Pageable pageable) {
-        return templateRepository.findByStatus(status, pageable)
+        return templateRepository.findActiveByStatus(status, pageable)
                 .flatMap(this::enrichWithVariables);
     }
 
     @Override
     public Flux<Template> findByCategory(String category, Pageable pageable) {
-        return templateRepository.findByCategory(category, pageable)
+        return templateRepository.findActiveByCategory(category, pageable)
                 .flatMap(this::enrichWithVariables);
     }
 
     @Override
     public Flux<Template> findByStatusAndCategory(String status, String category, Pageable pageable) {
-        return templateRepository.findByStatusAndCategory(status, category, pageable)
+        return templateRepository.findActiveByStatusAndCategory(status, category, pageable)
                 .flatMap(this::enrichWithVariables);
     }
 
     @Override
     public Flux<Template> search(String query, Pageable pageable) {
-        return templateRepository.findByNameContainingIgnoreCaseOrContentContainingIgnoreCase(query, query, pageable)
+        String likePattern = "%" + query + "%";
+        return templateRepository.searchActive(likePattern, likePattern, pageable)
                 .flatMap(this::enrichWithVariables);
     }
 
     @Override
     public Mono<Template> findById(Long id) {
-        return templateRepository.findById(id)
+        return templateRepository.findActiveById(id)
                 .flatMap(this::enrichWithVariables);
     }
 
@@ -103,8 +105,8 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
 
         org.springframework.r2dbc.core.DatabaseClient.GenericExecuteSpec spec = databaseClient.sql("UPDATE templates SET name = :name, category = CAST(:category AS template_category), " +
                 "language = :language, status = CAST(:status AS template_status), content = :content, " +
-                "rejection_reason = :rejectionReason, meta_error = :metaError, meta_template_id = :metaTemplateId, updated_at = :updatedAt WHERE id = :id " +
-                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, meta_error, meta_template_id, created_at, updated_at")
+                "rejection_reason = :rejectionReason, meta_error = :metaError, meta_template_id = :metaTemplateId, updated_at = :updatedAt WHERE id = :id AND deleted_at IS NULL " +
+                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, meta_error, meta_template_id, created_at, updated_at, deleted_at")
                 .bind("id", template.getId())
                 .bind("name", template.getName())
                 .bind("category", category)
@@ -139,6 +141,7 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                     entity.setMetaTemplateId(row.get("meta_template_id", String.class));
                     entity.setCreatedAt(row.get("created_at", LocalDateTime.class));
                     entity.setUpdatedAt(row.get("updated_at", LocalDateTime.class));
+                    entity.setDeletedAt(row.get("deleted_at", LocalDateTime.class));
                     return entity;
                 })
                 .one();
@@ -159,7 +162,7 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
         
         return databaseClient.sql("INSERT INTO templates (user_id, name, category, language, status, content, rejection_reason, created_at, updated_at) " +
                 "VALUES (1, :name, CAST(:category AS template_category), :language, CAST(:status AS template_status), :content, :rejectionReason, :createdAt, :updatedAt) " +
-                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, created_at, updated_at")
+                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, created_at, updated_at, deleted_at")
                 .bind("name", template.getName())
                 .bind("category", category)
                 .bind("language", language)
@@ -179,6 +182,7 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                     entity.setRejectionReason(row.get("rejection_reason", String.class));
                     entity.setCreatedAt(row.get("created_at", LocalDateTime.class));
                     entity.setUpdatedAt(row.get("updated_at", LocalDateTime.class));
+                    entity.setDeletedAt(row.get("deleted_at", LocalDateTime.class));
                     return entity;
                 })
                 .one()
@@ -195,17 +199,23 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
 
     @Override
     public Mono<Boolean> existsByName(String name) {
-        return templateRepository.existsByName(name);
+        return templateRepository.existsActiveByName(name);
     }
 
     @Override
     public Mono<Boolean> existsByNameAndIdNot(String name, Long id) {
-        return templateRepository.existsByNameAndIdNot(name, id);
+        return templateRepository.existsActiveByNameAndIdNot(name, id);
     }
 
     @Override
     public Mono<Long> countByStatus(String status) {
-        return templateRepository.countByStatus(status);
+        return templateRepository.countActiveByStatus(status);
+    }
+
+    @Override
+    public Mono<Void> deleteById(Long id) {
+        // Soft delete: set deleted_at = NOW() instead of physical delete
+        return templateRepository.softDeleteById(id);
     }
 
     private Mono<Template> enrichWithVariables(TemplateEntity entity) {

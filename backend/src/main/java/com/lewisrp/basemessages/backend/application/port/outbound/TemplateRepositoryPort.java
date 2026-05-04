@@ -59,4 +59,9 @@ public interface TemplateRepositoryPort {
      * Count templates by status.
      */
     Mono<Long> countByStatus(String status);
+
+    /**
+     * Delete template by ID.
+     */
+    Mono<Void> deleteById(Long id);
 }

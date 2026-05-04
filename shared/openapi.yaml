@@ -449,6 +449,31 @@ paths:
         '404':
           description: Template not found
 
+  /templates/{id}/refresh-status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    post:
+      tags:
+        - Templates
+      summary: Refresh template status from Meta
+      description: Poll Meta API for the latest review status of a submitted template
+      responses:
+        '200':
+          description: Template status refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Template has no Meta submission to refresh
+        '404':
+          description: Template not found
+
   /templates/performance:
     get:
       tags:

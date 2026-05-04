@@ -88,26 +88,35 @@ public class MetaApiClient {
                 });
     }
 
-    public Mono<String> getTemplateStatus(String templateId, String wabaId, String accessToken) {
+    public Mono<TemplateStatusResult> getTemplateStatus(String templateId, String wabaId, String accessToken) {
         String url = String.format("/%s", templateId);
 
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(url)
-                        .queryParam("fields", "status")
+                        .queryParam("fields", "status,rejection_reason")
                         .build())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
                     Object status = response.get("status");
-                    return status != null ? status.toString() : "UNKNOWN";
+                    Object rejectionReason = response.get("rejection_reason");
+                    String statusStr = status != null ? status.toString() : "UNKNOWN";
+                    String reasonStr = rejectionReason != null ? rejectionReason.toString() : null;
+                    log.info("Meta template status for {}: {} (reason: {})", templateId, statusStr, reasonStr);
+                    return new TemplateStatusResult(statusStr, reasonStr);
                 })
                 .onErrorResume(error -> {
                     log.error("Failed to get template status: {}", error.getMessage());
-                    return Mono.just("ERROR");
+                    return Mono.just(new TemplateStatusResult("ERROR", null));
                 });
     }
+
+    public record TemplateStatusResult(
+            String status,
+            String rejectionReason
+    ) {}
 
     public Mono<Boolean> testConnection(String wabaId, String phoneNumberId, String accessToken) {
         String targetId = (wabaId != null && !wabaId.isBlank()) ? wabaId : phoneNumberId;

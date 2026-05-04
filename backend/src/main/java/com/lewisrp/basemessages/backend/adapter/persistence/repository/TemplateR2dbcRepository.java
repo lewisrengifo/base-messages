@@ -10,51 +10,70 @@ import reactor.core.publisher.Mono;
 
 /**
  * Spring Data R2DBC repository for TemplateEntity.
+ * All finder methods exclude soft-deleted records (deleted_at IS NULL).
  */
 @Repository
 public interface TemplateR2dbcRepository extends ReactiveCrudRepository<TemplateEntity, Long> {
 
     /**
-     * Find all templates with pagination.
+     * Find all non-deleted templates with pagination.
      */
-    Flux<TemplateEntity> findAllBy(Pageable pageable);
+    @Query("SELECT * FROM templates WHERE deleted_at IS NULL")
+    Flux<TemplateEntity> findAllActive(Pageable pageable);
 
     /**
-     * Find templates by status.
+     * Find non-deleted templates by status.
      */
-    Flux<TemplateEntity> findByStatus(String status, Pageable pageable);
+    @Query("SELECT * FROM templates WHERE status = :status AND deleted_at IS NULL")
+    Flux<TemplateEntity> findActiveByStatus(String status, Pageable pageable);
 
     /**
-     * Find templates by category.
+     * Find non-deleted templates by category.
      */
-    Flux<TemplateEntity> findByCategory(String category, Pageable pageable);
+    @Query("SELECT * FROM templates WHERE category = CAST(:category AS template_category) AND deleted_at IS NULL")
+    Flux<TemplateEntity> findActiveByCategory(String category, Pageable pageable);
 
     /**
-     * Find templates by status and category.
+     * Find non-deleted templates by status and category.
      */
-    Flux<TemplateEntity> findByStatusAndCategory(String status, String category, Pageable pageable);
+    @Query("SELECT * FROM templates WHERE status = :status AND category = CAST(:category AS template_category) AND deleted_at IS NULL")
+    Flux<TemplateEntity> findActiveByStatusAndCategory(String status, String category, Pageable pageable);
 
     /**
-     * Search templates by name or content (case insensitive).
+     * Search non-deleted templates by name or content (case insensitive).
      */
-    Flux<TemplateEntity> findByNameContainingIgnoreCaseOrContentContainingIgnoreCase(
-            String name, String content, Pageable pageable);
+    @Query("SELECT * FROM templates WHERE (LOWER(name) LIKE LOWER(:name) OR LOWER(content) LIKE LOWER(:content)) AND deleted_at IS NULL")
+    Flux<TemplateEntity> searchActive(String name, String content, Pageable pageable);
 
     /**
-     * Check if a template with the given name exists.
+     * Find non-deleted template by ID.
      */
-    Mono<Boolean> existsByName(String name);
+    @Query("SELECT * FROM templates WHERE id = :id AND deleted_at IS NULL")
+    Mono<TemplateEntity> findActiveById(Long id);
 
     /**
-     * Check if a template with the given name exists excluding the given id.
+     * Check if a non-deleted template with the given name exists.
      */
-    @Query("SELECT EXISTS (SELECT 1 FROM templates WHERE name = :name AND id != :id)")
-    Mono<Boolean> existsByNameAndIdNot(String name, Long id);
+    @Query("SELECT EXISTS (SELECT 1 FROM templates WHERE name = :name AND deleted_at IS NULL)")
+    Mono<Boolean> existsActiveByName(String name);
 
     /**
-     * Count templates by status.
+     * Check if a non-deleted template with the given name exists excluding the given id.
      */
-    Mono<Long> countByStatus(String status);
+    @Query("SELECT EXISTS (SELECT 1 FROM templates WHERE name = :name AND id != :id AND deleted_at IS NULL)")
+    Mono<Boolean> existsActiveByNameAndIdNot(String name, Long id);
+
+    /**
+     * Count non-deleted templates by status.
+     */
+    @Query("SELECT COUNT(*) FROM templates WHERE status = :status AND deleted_at IS NULL")
+    Mono<Long> countActiveByStatus(String status);
+
+    /**
+     * Soft delete a template by setting deleted_at = NOW().
+     */
+    @Query("UPDATE templates SET deleted_at = NOW() WHERE id = :id")
+    Mono<Void> softDeleteById(Long id);
 
     /**
      * Save template with explicit enum casting for PostgreSQL.

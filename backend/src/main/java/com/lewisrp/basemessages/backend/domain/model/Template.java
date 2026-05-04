@@ -29,6 +29,7 @@ public class Template {
     private String metaError;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime deletedAt;
 
     /**
      * Template categories as defined by Meta.
@@ -84,10 +85,11 @@ public class Template {
 
     /**
      * Transition template to PENDING status for submission.
+     * Idempotent: PENDING → PENDING is allowed for resubmission flows.
      */
     public void submitForApproval() {
-        if (status != TemplateStatus.DRAFT && status != TemplateStatus.REJECTED) {
-            throw new IllegalStateException("Only DRAFT or REJECTED templates can be submitted");
+        if (status != TemplateStatus.DRAFT && status != TemplateStatus.REJECTED && status != TemplateStatus.PENDING) {
+            throw new IllegalStateException("Only DRAFT, REJECTED, or PENDING templates can be submitted");
         }
         this.status = TemplateStatus.PENDING;
     }

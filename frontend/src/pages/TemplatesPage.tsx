@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { listTemplates, deleteTemplate, resubmitTemplate } from '@/api/templates';
+import { listTemplates, deleteTemplate, resubmitTemplate, refreshTemplateStatus } from '@/api/templates';
 import type { Template, TemplateCategory, TemplateStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
 import { ApiClientError } from '@/api/client';
@@ -72,6 +72,7 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
   const [statusFilter, setStatusFilter] = useState<TemplateStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
   const [resubmittingId, setResubmittingId] = useState<number | null>(null);
+  const [refreshingId, setRefreshingId] = useState<number | null>(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -135,6 +136,20 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
       setError(message);
     } finally {
       setResubmittingId(null);
+    }
+  };
+
+  const handleRefreshStatus = async (id: number) => {
+    setRefreshingId(id);
+    setError(null);
+    try {
+      await refreshTemplateStatus(id);
+      await fetchTemplates();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to refresh template status';
+      setError(message);
+    } finally {
+      setRefreshingId(null);
     }
   };
 
@@ -213,7 +228,6 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
               <SelectItem value="APPROVED">Approved</SelectItem>
               <SelectItem value="PENDING">Pending</SelectItem>
               <SelectItem value="REJECTED">Rejected</SelectItem>
-              <SelectItem value="DRAFT">Draft</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -256,6 +270,7 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
             const statusVariant = STATUS_VARIANTS[template.status] || '';
             const metaErrorMsg = getMetaErrorMessage(template.metaError);
             const isResubmitting = resubmittingId === template.id;
+            const isRefreshing = refreshingId === template.id;
 
             return (
               <Card key={template.id} className="group border-none shadow-sm hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col h-full relative overflow-hidden rounded-2xl">
@@ -336,6 +351,24 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {template.status === 'PENDING' && !metaErrorMsg && (
+                          <DropdownMenuItem
+                            onClick={() => handleRefreshStatus(template.id)}
+                            disabled={isRefreshing}
+                          >
+                            {isRefreshing ? (
+                              <>
+                                <Loader2 size={14} className="mr-2 animate-spin" />
+                                Refreshing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw size={14} className="mr-2" />
+                                Refresh Status from Meta
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        )}
                         {canResubmit(template) && (
                           <DropdownMenuItem
                             onClick={() => handleResubmit(template.id)}

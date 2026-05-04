@@ -2,6 +2,7 @@ package com.lewisrp.basemessages.backend.application.service;
 
 import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient;
 import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient.SubmissionResult;
+import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient.TemplateStatusResult;
 import com.lewisrp.basemessages.backend.adapter.security.EncryptionService;
 import com.lewisrp.basemessages.backend.application.dto.CreateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
@@ -58,7 +59,7 @@ public class TemplateApplicationService {
                             .name(command.getName())
                             .category(Template.TemplateCategory.valueOf(command.getCategory().toUpperCase()))
                             .language(language)
-                            .status(Template.TemplateStatus.DRAFT)
+                            .status(Template.TemplateStatus.PENDING)
                             .content(command.getContent())
                             .build();
 
@@ -100,6 +101,56 @@ public class TemplateApplicationService {
                 .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)));
     }
 
+    public Mono<TemplateDto> refreshTemplateStatus(Long id) {
+        log.info("Refreshing template status from Meta: {}", id);
+
+        return templateRepository.findById(id)
+                .flatMap(template -> {
+                    if (template.getMetaTemplateId() == null || template.getMetaTemplateId().isBlank()) {
+                        return Mono.error(new IllegalStateException(
+                                "This template has not been submitted to Meta yet"));
+                    }
+
+                    return connectionRepository.findCurrent()
+                            .flatMap(connection -> {
+                                String accessToken = encryptionService.decrypt(connection.getAccessToken());
+                                return metaApiClient.getTemplateStatus(
+                                        template.getMetaTemplateId(),
+                                        connection.getWabaId(),
+                                        accessToken
+                                );
+                            })
+                            .flatMap(statusResult -> {
+                                String metaStatus = statusResult.status();
+                                log.info("Meta status for template {}: {}", id, metaStatus);
+
+                                return switch (metaStatus.toUpperCase()) {
+                                    case "APPROVED" -> {
+                                        template.approve();
+                                        template.setMetaError(null);
+                                        yield templateRepository.save(template).map(this::toDto);
+                                    }
+                                    case "REJECTED" -> {
+                                        String reason = statusResult.rejectionReason();
+                                        template.reject(reason != null ? reason : "Rejected by Meta");
+                                        template.setMetaError(null);
+                                        yield templateRepository.save(template).map(this::toDto);
+                                    }
+                                    case "PENDING" -> Mono.just(template).map(this::toDto);
+                                    case "ERROR" -> Mono.error(new IllegalStateException(
+                                            "Failed to fetch status from Meta. Please try again."));
+                                    default -> {
+                                        log.warn("Unknown Meta status '{}', keeping current status", metaStatus);
+                                        yield Mono.just(template).map(this::toDto);
+                                    }
+                                };
+                            })
+                            .switchIfEmpty(Mono.error(new IllegalStateException(
+                                    "No connection found. Cannot refresh status from Meta.")));
+                })
+                .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)));
+    }
+
     public Mono<TemplateDto> updateTemplate(Long id, UpdateTemplateCommand command) {
         log.info("Updating template: {}", id);
 
@@ -114,7 +165,7 @@ public class TemplateApplicationService {
                 .flatMap(template -> {
                     if (!template.canBeUpdated()) {
                         return Mono.error(new IllegalStateException(
-                                "Only DRAFT, REJECTED, or PENDING templates with a previous error can be updated"));
+                                "Only REJECTED or PENDING templates with a previous error can be updated"));
                     }
 
                     // Check name uniqueness if changed
@@ -235,6 +286,13 @@ public class TemplateApplicationService {
                 .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)));
     }
 
+    public Mono<Void> deleteTemplate(Long id) {
+        log.info("Deleting template: {}", id);
+        return templateRepository.findById(id)
+                .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)))
+                .flatMap(template -> templateRepository.deleteById(id));
+    }
+
     private TemplateDto toDto(Template template) {
         List<TemplateDto.TemplateVariableDto> variables = null;
         if (template.getVariables() != null) {
@@ -254,7 +312,8 @@ public class TemplateApplicationService {
                 template.getRejectionReason(),
                 template.getMetaError(),
                 template.getCreatedAt(),
-                template.getUpdatedAt()
+                template.getUpdatedAt(),
+                template.getDeletedAt()
         );
     }
 
