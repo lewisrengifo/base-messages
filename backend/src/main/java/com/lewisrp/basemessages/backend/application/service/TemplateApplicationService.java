@@ -132,7 +132,10 @@ public class TemplateApplicationService {
                                     }
                                     case "REJECTED" -> {
                                         String reason = statusResult.rejectionReason();
-                                        template.reject(reason != null ? reason : "Rejected by Meta");
+                                        if (reason == null || reason.isBlank()) {
+                                            reason = template.getRejectionReason() != null ? template.getRejectionReason() : "Rejected by Meta";
+                                        }
+                                        template.reject(reason);
                                         template.setMetaError(null);
                                         yield templateRepository.save(template).map(this::toDto);
                                     }

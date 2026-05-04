@@ -94,18 +94,16 @@ public class MetaApiClient {
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(url)
-                        .queryParam("fields", "status,rejection_reason")
+                        .queryParam("fields", "status")
                         .build())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
                     Object status = response.get("status");
-                    Object rejectionReason = response.get("rejection_reason");
                     String statusStr = status != null ? status.toString() : "UNKNOWN";
-                    String reasonStr = rejectionReason != null ? rejectionReason.toString() : null;
-                    log.info("Meta template status for {}: {} (reason: {})", templateId, statusStr, reasonStr);
-                    return new TemplateStatusResult(statusStr, reasonStr);
+                    log.info("Meta template status for {}: {}", templateId, statusStr);
+                    return new TemplateStatusResult(statusStr, null);
                 })
                 .onErrorResume(error -> {
                     log.error("Failed to get template status: {}", error.getMessage());
