@@ -24,6 +24,20 @@ export default function App() {
 function AppContent() {
   const [activePage, setActivePage] = useState<PageId>('campaigns');
   const [lastSubmittedTemplateName, setLastSubmittedTemplateName] = useState<string>('');
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+
+  const handleNavigate = (page: PageId) => {
+    // Clear editing state when leaving template builder
+    if (page !== 'template-builder') {
+      setEditingTemplateId(null);
+    }
+    setActivePage(page);
+  };
+
+  const handleEditTemplate = (templateId: number) => {
+    setEditingTemplateId(templateId);
+    setActivePage('template-builder');
+  };
 
   const renderPage = () => {
     switch (activePage) {
@@ -32,32 +46,33 @@ function AppContent() {
       case 'contacts':
         return <ContactsPage />;
       case 'templates':
-        return <TemplatesPage onNavigate={setActivePage} />;
+        return <TemplatesPage onNavigate={handleNavigate} onEditTemplate={handleEditTemplate} />;
       case 'campaigns':
-        return <CampaignsPage onNavigate={setActivePage} />;
+        return <CampaignsPage onNavigate={handleNavigate} />;
       case 'template-builder':
         return (
           <TemplateBuilderPage
-            onNavigate={setActivePage}
+            onNavigate={handleNavigate}
             onTemplateSubmitted={setLastSubmittedTemplateName}
+            editTemplateId={editingTemplateId}
           />
         );
       case 'campaign-builder':
-        return <CampaignBuilderPage onNavigate={setActivePage} />;
+        return <CampaignBuilderPage onNavigate={handleNavigate} />;
       case 'campaign-analytics':
-        return <CampaignAnalyticsPage onNavigate={setActivePage} />;
+        return <CampaignAnalyticsPage onNavigate={handleNavigate} />;
       case 'campaign-sent':
-        return <CampaignSentPage onBack={() => setActivePage('campaigns')} onNavigate={setActivePage} />;
+        return <CampaignSentPage onBack={() => handleNavigate('campaigns')} onNavigate={handleNavigate} />;
       case 'submission-sent':
         return (
           <SubmissionSentPage
-            onBack={() => setActivePage('templates')}
-            onNavigate={setActivePage}
+            onBack={() => handleNavigate('templates')}
+            onNavigate={handleNavigate}
             templateName={lastSubmittedTemplateName}
           />
         );
       default:
-        return <CampaignsPage onNavigate={setActivePage} />;
+        return <CampaignsPage onNavigate={handleNavigate} />;
     }
   };
 

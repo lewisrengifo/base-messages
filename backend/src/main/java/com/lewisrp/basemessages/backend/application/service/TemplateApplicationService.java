@@ -5,6 +5,8 @@ import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient.Submissio
 import com.lewisrp.basemessages.backend.adapter.security.EncryptionService;
 import com.lewisrp.basemessages.backend.application.dto.CreateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
+import com.lewisrp.basemessages.backend.application.dto.UpdateTemplateCommand;
+import com.lewisrp.basemessages.backend.application.exception.MetaSubmissionException;
 import com.lewisrp.basemessages.backend.application.port.outbound.ConnectionRepositoryPort;
 import com.lewisrp.basemessages.backend.application.port.outbound.TemplateRepositoryPort;
 import com.lewisrp.basemessages.backend.domain.model.Connection;
@@ -36,6 +38,11 @@ public class TemplateApplicationService {
     public Mono<TemplateDto> createTemplate(CreateTemplateCommand command) {
         log.info("Creating template: {}", command.getName());
 
+        String nameValidationError = validateTemplateName(command.getName());
+        if (nameValidationError != null) {
+            return Mono.error(new IllegalArgumentException(nameValidationError));
+        }
+
         return templateRepository.existsByName(command.getName())
                 .flatMap(exists -> {
                     if (exists) {
@@ -66,17 +73,93 @@ public class TemplateApplicationService {
                     }
 
                     return templateRepository.save(template)
-                            .flatMap(savedTemplate -> submitToMeta(savedTemplate, command));
+                            .flatMap(this::submitToMeta);
                 });
     }
 
-    private Mono<TemplateDto> submitToMeta(Template template, CreateTemplateCommand command) {
+    public Mono<TemplateDto> resubmitTemplate(Long id) {
+        log.info("Resubmitting template: {}", id);
+
+        return templateRepository.findById(id)
+                .flatMap(template -> {
+                    if (!template.canBeResubmitted()) {
+                        return Mono.error(new IllegalStateException(
+                                "Only rejected templates or templates with a previous submission error can be resubmitted"));
+                    }
+
+                    // Clear previous error before retry
+                    template.setMetaError(null);
+
+                    // Transition rejected templates back to pending
+                    if (template.getStatus() == Template.TemplateStatus.REJECTED) {
+                        template.submitForApproval();
+                    }
+
+                    return submitToMeta(template);
+                })
+                .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)));
+    }
+
+    public Mono<TemplateDto> updateTemplate(Long id, UpdateTemplateCommand command) {
+        log.info("Updating template: {}", id);
+
+        if (command.getName() != null) {
+            String nameValidationError = validateTemplateName(command.getName());
+            if (nameValidationError != null) {
+                return Mono.error(new IllegalArgumentException(nameValidationError));
+            }
+        }
+
+        return templateRepository.findById(id)
+                .flatMap(template -> {
+                    if (!template.canBeUpdated()) {
+                        return Mono.error(new IllegalStateException(
+                                "Only DRAFT, REJECTED, or PENDING templates with a previous error can be updated"));
+                    }
+
+                    // Check name uniqueness if changed
+                    Mono<Boolean> nameCheck = Mono.just(false);
+                    if (command.getName() != null && !command.getName().equals(template.getName())) {
+                        nameCheck = templateRepository.existsByNameAndIdNot(command.getName(), id);
+                    }
+
+                    return nameCheck.flatMap(exists -> {
+                        if (exists) {
+                            return Mono.error(new IllegalArgumentException(
+                                    "Template with name '" + command.getName() + "' already exists"));
+                        }
+
+                        // Apply updates
+                        if (command.getName() != null) {
+                            template.setName(command.getName());
+                        }
+                        if (command.getContent() != null) {
+                            template.setContent(command.getContent());
+                        }
+                        if (command.getVariables() != null) {
+                            List<TemplateVariable> variables = IntStream.range(0, command.getVariables().size())
+                                    .mapToObj(i -> TemplateVariable.builder()
+                                            .position(i + 1)
+                                            .example(command.getVariables().get(i).getExample())
+                                            .build())
+                                    .collect(Collectors.toList());
+                            template.setVariables(variables);
+                        }
+
+                        return templateRepository.save(template)
+                                .map(this::toDto);
+                    });
+                })
+                .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)));
+    }
+
+    private Mono<TemplateDto> submitToMeta(Template template) {
         return connectionRepository.findCurrent()
                 .flatMap(connection -> {
                     String accessToken = encryptionService.decrypt(connection.getAccessToken());
                     List<HashMap<String, String>> metaVariables = null;
-                    if (command.getVariables() != null && !command.getVariables().isEmpty()) {
-                        metaVariables = command.getVariables().stream()
+                    if (template.getVariables() != null && !template.getVariables().isEmpty()) {
+                        metaVariables = template.getVariables().stream()
                                 .map(v -> {
                                     HashMap<String, String> map = new HashMap<>();
                                     map.put("example", v.getExample());
@@ -98,28 +181,33 @@ public class TemplateApplicationService {
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("No connection found — saving template locally as PENDING without Meta submission");
-                    template.submitForApproval();
+                    if (template.getStatus() != Template.TemplateStatus.PENDING) {
+                        template.submitForApproval();
+                    }
                     return templateRepository.save(template).map(this::toDto);
-                }))
-                .onErrorResume(error -> {
-                    log.error("Failed to submit template to Meta: {}", error.getMessage());
-                    template.submitForApproval();
-                    return templateRepository.save(template).map(this::toDto);
-                });
+                }));
     }
 
     private Mono<TemplateDto> handleSubmissionResult(SubmissionResult result, Template template) {
         if (result.success()) {
             log.info("Template submitted to Meta successfully — metaId: {}", result.metaTemplateId());
-            template.submitForApproval();
+            if (template.getStatus() != Template.TemplateStatus.PENDING) {
+                template.submitForApproval();
+            }
+            template.setMetaError(null);
             if (result.metaTemplateId() != null) {
                 template.setMetaTemplateId(result.metaTemplateId());
             }
             return templateRepository.save(template).map(this::toDto);
         } else {
             log.error("Meta submission failed: {} — saving template as PENDING for retry", result.errorMessage());
-            template.submitForApproval();
-            return templateRepository.save(template).map(this::toDto);
+            if (template.getStatus() != Template.TemplateStatus.PENDING) {
+                template.submitForApproval();
+            }
+            template.setMetaError(result.errorMessage());
+            return templateRepository.save(template)
+                    .flatMap(saved -> Mono.error(new MetaSubmissionException(
+                            "Template submission to Meta failed", result.errorMessage())));
         }
     }
 
@@ -164,6 +252,7 @@ public class TemplateApplicationService {
                 template.getContent(),
                 variables,
                 template.getRejectionReason(),
+                template.getMetaError(),
                 template.getCreatedAt(),
                 template.getUpdatedAt()
         );
@@ -179,7 +268,29 @@ public class TemplateApplicationService {
     }
 
     private String languageToCode(Template.TemplateLanguage language) {
-        return language.name().toLowerCase();
+        String name = language.name();
+        int idx = name.indexOf('_');
+        if (idx > 0) {
+            // e.g. EN_US -> en_US, PT_BR -> pt_BR
+            return name.substring(0, idx).toLowerCase() + name.substring(idx);
+        }
+        return name.toLowerCase();
+    }
+
+    /**
+     * Validates that a template name meets Meta's requirements.
+     * Meta requires names to contain only lowercase letters, numbers, and underscores.
+     *
+     * @return null if valid, error message otherwise
+     */
+    private String validateTemplateName(String name) {
+        if (name == null || name.isBlank()) {
+            return "Template name is required";
+        }
+        if (!name.matches("^[a-z0-9_]+$")) {
+            return "Template name can only contain lowercase letters, numbers, and underscores";
+        }
+        return null;
     }
 
     public static class NotFoundException extends RuntimeException {

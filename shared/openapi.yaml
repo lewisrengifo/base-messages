@@ -1046,6 +1046,10 @@ components:
                 type: integer
               example:
                 type: string
+        metaError:
+          type: string
+          description: Meta API error message when submission failed
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1061,6 +1065,10 @@ components:
             rejectionReason:
               type: string
               description: Present if status is REJECTED
+            metaError:
+              type: string
+              description: Meta API error message when submission failed
+              nullable: true
             performance:
               $ref: '#/components/schemas/TemplatePerformance'
 

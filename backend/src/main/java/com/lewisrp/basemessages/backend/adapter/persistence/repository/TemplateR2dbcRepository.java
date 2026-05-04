@@ -46,6 +46,12 @@ public interface TemplateR2dbcRepository extends ReactiveCrudRepository<Template
     Mono<Boolean> existsByName(String name);
 
     /**
+     * Check if a template with the given name exists excluding the given id.
+     */
+    @Query("SELECT EXISTS (SELECT 1 FROM templates WHERE name = :name AND id != :id)")
+    Mono<Boolean> existsByNameAndIdNot(String name, Long id);
+
+    /**
      * Count templates by status.
      */
     Mono<Long> countByStatus(String status);

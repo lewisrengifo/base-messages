@@ -84,12 +84,14 @@ export interface Template {
   status: TemplateStatus;
   content: string;
   variables?: TemplateVariable[];
+  metaError?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface TemplateDetail extends Template {
   rejectionReason?: string;
+  metaError?: string;
 }
 
 export interface TemplateListResponse {
@@ -107,6 +109,12 @@ export interface CreateTemplateRequest {
 
 export interface CreateTemplateVariable {
   example: string;
+}
+
+export interface UpdateTemplateRequest {
+  name?: string;
+  content?: string;
+  variables?: CreateTemplateVariable[];
 }
 
 // ============================================================================

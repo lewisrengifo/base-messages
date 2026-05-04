@@ -6,7 +6,7 @@
  */
 
 import { apiClient } from './client';
-import type { Template, TemplateListResponse, CreateTemplateRequest, TemplateDetail, PaginationParams } from './types';
+import type { Template, TemplateListResponse, CreateTemplateRequest, TemplateDetail, UpdateTemplateRequest } from './types';
 
 const TEMPLATES_ENDPOINT = '/templates';
 
@@ -47,6 +47,20 @@ export async function getTemplate(id: number): Promise<TemplateDetail> {
  */
 export async function createTemplate(data: CreateTemplateRequest): Promise<Template> {
   return apiClient.post<Template>(TEMPLATES_ENDPOINT, data);
+}
+
+/**
+ * Update an existing template
+ */
+export async function updateTemplate(id: number, data: UpdateTemplateRequest): Promise<Template> {
+  return apiClient.put<Template>(`${TEMPLATES_ENDPOINT}/${id}`, data);
+}
+
+/**
+ * Resubmit a template for Meta approval
+ */
+export async function resubmitTemplate(id: number): Promise<Template> {
+  return apiClient.post<Template>(`${TEMPLATES_ENDPOINT}/${id}/resubmit`, {});
 }
 
 /**

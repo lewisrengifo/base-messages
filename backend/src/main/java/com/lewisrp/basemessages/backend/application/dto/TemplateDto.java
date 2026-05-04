@@ -15,12 +15,13 @@ public class TemplateDto {
     private final String content;
     private final List<TemplateVariableDto> variables;
     private final String rejectionReason;
+    private final String metaError;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
-    public TemplateDto(Long id, String name, String category, String language, 
+    public TemplateDto(Long id, String name, String category, String language,
                        String status, String content, List<TemplateVariableDto> variables,
-                       String rejectionReason, LocalDateTime createdAt, LocalDateTime updatedAt) {
+                       String rejectionReason, String metaError, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
         this.category = category;
@@ -29,6 +30,7 @@ public class TemplateDto {
         this.content = content;
         this.variables = variables;
         this.rejectionReason = rejectionReason;
+        this.metaError = metaError;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -63,6 +65,10 @@ public class TemplateDto {
 
     public String getRejectionReason() {
         return rejectionReason;
+    }
+
+    public String getMetaError() {
+        return metaError;
     }
 
     public LocalDateTime getCreatedAt() {

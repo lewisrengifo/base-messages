@@ -2,12 +2,14 @@ package com.lewisrp.basemessages.backend.adapter.web;
 
 import com.lewisrp.basemessages.backend.application.dto.CreateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
+import com.lewisrp.basemessages.backend.application.dto.UpdateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.service.TemplateApplicationService;
 import org.openapitools.api.TemplatesApiDelegate;
 import org.openapitools.model.CreateTemplateRequest;
 import org.openapitools.model.Template;
 import org.openapitools.model.TemplateDetail;
 import org.openapitools.model.TemplateListResponse;
+import org.openapitools.model.UpdateTemplateRequest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -66,13 +68,7 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                 .map(this::toCommand)
                 .flatMap(templateService::createTemplate)
                 .map(this::toApiModel)
-                .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template))
-                .onErrorResume(e -> {
-                    System.err.println("Error creating template: " + e.getMessage());
-                    e.printStackTrace();
-                    exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
-                    return Mono.just(ResponseEntity.badRequest().body(null));
-                });
+                .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template));
     }
 
     @Override
@@ -119,10 +115,27 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                     }
                     
                     detail.setRejectionReason(dto.getRejectionReason());
+                    detail.setMetaError(dto.getMetaError());
                     return detail;
                 })
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.notFound().build()));
+    }
+
+    @Override
+    public Mono<ResponseEntity<Template>> templatesIdResubmitPost(Integer id, ServerWebExchange exchange) {
+        return templateService.resubmitTemplate(Long.valueOf(id))
+                .map(this::toApiModel)
+                .map(ResponseEntity::ok);
+    }
+
+    @Override
+    public Mono<ResponseEntity<Template>> templatesIdPut(Integer id, Mono<UpdateTemplateRequest> updateTemplateRequest, ServerWebExchange exchange) {
+        return updateTemplateRequest
+                .map(this::toUpdateCommand)
+                .flatMap(command -> templateService.updateTemplate(Long.valueOf(id), command))
+                .map(this::toApiModel)
+                .map(ResponseEntity::ok);
     }
 
     private CreateTemplateCommand toCommand(CreateTemplateRequest request) {
@@ -138,6 +151,27 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                 request.getCategory() != null ? request.getCategory().name() : null,
                 request.getContent(),
                 request.getLanguage(),
+                variables
+        );
+    }
+
+    private UpdateTemplateCommand toUpdateCommand(UpdateTemplateRequest request) {
+        List<UpdateTemplateCommand.TemplateVariableDto> variables = null;
+        if (request.getVariables() != null) {
+            variables = request.getVariables().stream()
+                    .map(v -> {
+                        if (v instanceof java.util.Map<?, ?> map) {
+                            Object example = map.get("example");
+                            return new UpdateTemplateCommand.TemplateVariableDto(example != null ? example.toString() : null);
+                        }
+                        return new UpdateTemplateCommand.TemplateVariableDto(null);
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        return new UpdateTemplateCommand(
+                request.getName(),
+                request.getContent(),
                 variables
         );
     }
@@ -179,7 +213,9 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
         if (dto.getUpdatedAt() != null) {
             template.setUpdatedAt(dto.getUpdatedAt().atOffset(ZoneOffset.UTC));
         }
-        
+
+        template.setMetaError(dto.getMetaError());
+
         return template;
     }
 }

@@ -101,10 +101,10 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
             : "EN_US";
         LocalDateTime now = LocalDateTime.now();
 
-        return databaseClient.sql("UPDATE templates SET name = :name, category = CAST(:category AS template_category), " +
+        org.springframework.r2dbc.core.DatabaseClient.GenericExecuteSpec spec = databaseClient.sql("UPDATE templates SET name = :name, category = CAST(:category AS template_category), " +
                 "language = :language, status = CAST(:status AS template_status), content = :content, " +
-                "rejection_reason = :rejectionReason, updated_at = :updatedAt WHERE id = :id " +
-                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, created_at, updated_at")
+                "rejection_reason = :rejectionReason, meta_error = :metaError, meta_template_id = :metaTemplateId, updated_at = :updatedAt WHERE id = :id " +
+                "RETURNING id, user_id, name, category::text, language, status::text, content, rejection_reason, meta_error, meta_template_id, created_at, updated_at")
                 .bind("id", template.getId())
                 .bind("name", template.getName())
                 .bind("category", category)
@@ -112,8 +112,21 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                 .bind("status", status)
                 .bind("content", template.getContent())
                 .bind("rejectionReason", template.getRejectionReason() != null ? template.getRejectionReason() : "")
-                .bind("updatedAt", now)
-                .map((row, metadata) -> {
+                .bind("updatedAt", now);
+
+        if (template.getMetaError() != null) {
+            spec = spec.bind("metaError", template.getMetaError());
+        } else {
+            spec = spec.bindNull("metaError", String.class);
+        }
+
+        if (template.getMetaTemplateId() != null) {
+            spec = spec.bind("metaTemplateId", template.getMetaTemplateId());
+        } else {
+            spec = spec.bindNull("metaTemplateId", String.class);
+        }
+
+        return spec.map((row, metadata) -> {
                     TemplateEntity entity = new TemplateEntity();
                     entity.setId(row.get("id", Long.class));
                     entity.setName(row.get("name", String.class));
@@ -122,6 +135,8 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
                     entity.setStatus(row.get("status", String.class));
                     entity.setContent(row.get("content", String.class));
                     entity.setRejectionReason(row.get("rejection_reason", String.class));
+                    entity.setMetaError(row.get("meta_error", String.class));
+                    entity.setMetaTemplateId(row.get("meta_template_id", String.class));
                     entity.setCreatedAt(row.get("created_at", LocalDateTime.class));
                     entity.setUpdatedAt(row.get("updated_at", LocalDateTime.class));
                     return entity;
@@ -181,6 +196,11 @@ public class TemplateRepositoryAdapter implements TemplateRepositoryPort {
     @Override
     public Mono<Boolean> existsByName(String name) {
         return templateRepository.existsByName(name);
+    }
+
+    @Override
+    public Mono<Boolean> existsByNameAndIdNot(String name, Long id) {
+        return templateRepository.existsByNameAndIdNot(name, id);
     }
 
     @Override

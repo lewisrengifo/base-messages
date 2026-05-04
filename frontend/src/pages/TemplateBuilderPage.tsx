@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,16 +7,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { createTemplate } from '@/api/templates';
-import type { CreateTemplateRequest, TemplateCategory } from '@/api/types';
+import { createTemplate, updateTemplate, getTemplate } from '@/api/templates';
+import type { CreateTemplateRequest, TemplateCategory, UpdateTemplateRequest } from '@/api/types';
 import { PageId } from '../components/Layout';
+import { ApiClientError } from '@/api/client';
 
 interface TemplateBuilderPageProps {
   onNavigate: (page: PageId) => void;
   onTemplateSubmitted: (templateName: string) => void;
+  editTemplateId?: number | null;
 }
 
-export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }: TemplateBuilderPageProps) {
+export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, editTemplateId }: TemplateBuilderPageProps) {
+  const isEditMode = !!editTemplateId;
   const [formData, setFormData] = useState<CreateTemplateRequest>({
     name: '',
     category: 'Marketing',
@@ -27,6 +30,67 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState('');
+  const [fetchingTemplate, setFetchingTemplate] = useState(isEditMode);
+
+  // Load template data when in edit mode
+  useEffect(() => {
+    if (isEditMode && editTemplateId) {
+      setFetchingTemplate(true);
+      getTemplate(editTemplateId)
+        .then((template) => {
+          setFormData({
+            name: template.name,
+            category: template.category,
+            content: template.content,
+            language: template.language.toLowerCase(),
+            variables: template.variables?.map((v) => ({ example: v.example })) || [],
+          });
+          // Generate preview
+          let previewText = template.content;
+          template.variables?.forEach((v, index) => {
+            const placeholder = `{{${index + 1}}}`;
+            previewText = previewText.replace(
+              new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+              v.example || `[Value ${index + 1}]`
+            );
+          });
+          setPreview(previewText);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to load template');
+        })
+        .finally(() => {
+          setFetchingTemplate(false);
+        });
+    }
+  }, [isEditMode, editTemplateId]);
+
+  const extractMetaErrorMessage = (err: unknown): string => {
+    if (err instanceof ApiClientError && err.apiError) {
+      const message = err.apiError.message || 'Unknown error';
+      if (err.apiError.details && typeof err.apiError.details === 'object') {
+        const details = err.apiError.details as Record<string, unknown>;
+        if (details.metaError) {
+          try {
+            const metaError = JSON.parse(details.metaError as string);
+            if (metaError.error && metaError.error.error_user_msg) {
+              return metaError.error.error_user_msg;
+            }
+            if (metaError.error && metaError.error.message) {
+              return metaError.error.message;
+            }
+          } catch {
+            return details.metaError as string;
+          }
+        }
+      }
+      return message;
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return 'An unexpected error occurred';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,18 +98,27 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
     setError(null);
 
     try {
-      const createdTemplate = await createTemplate(formData);
-      onTemplateSubmitted(createdTemplate.name || formData.name);
-      onNavigate('submission-sent');
+      if (isEditMode && editTemplateId) {
+        const updateData: UpdateTemplateRequest = {
+          name: formData.name,
+          content: formData.content,
+          variables: formData.variables,
+        };
+        await updateTemplate(editTemplateId, updateData);
+        onNavigate('templates');
+      } else {
+        const createdTemplate = await createTemplate(formData);
+        onTemplateSubmitted(createdTemplate.name || formData.name);
+        onNavigate('submission-sent');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create template');
+      setError(extractMetaErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   const handleContentChange = (content: string) => {
-    setFormData({ ...formData, content });
     // Update preview by replacing variables with example values
     let previewText = content;
     const variableMatches = content.match(/\{\{(\d+)\}\}/g) || [];
@@ -75,6 +148,14 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
     handleContentChange(newContent);
   };
 
+  if (fetchingTemplate) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row gap-12">
       {/* Left Panel: Configuration */}
@@ -88,8 +169,14 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
             <ArrowLeft size={16} />
             Back to Templates
           </Button>
-          <h1 className="text-4xl font-extrabold mb-2">Create New Template</h1>
-          <p className="text-muted-foreground text-lg">Design and configure your message template for Meta API delivery.</p>
+          <h1 className="text-4xl font-extrabold mb-2">
+            {isEditMode ? 'Edit Template' : 'Create New Template'}
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            {isEditMode
+              ? 'Update your message template details before resubmitting.'
+              : 'Design and configure your message template for Meta API delivery.'}
+          </p>
         </header>
 
         {error && (
@@ -109,17 +196,25 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
                   <Input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const formatted = raw.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
+                      setFormData({ ...formData, name: formatted });
+                    }}
                     placeholder="e.g. welcome_series_q4"
                     className="bg-background border-none h-12 px-4 rounded-xl font-bold focus-visible:ring-primary"
                     required
                   />
+                  <p className="text-[11px] text-muted-foreground font-medium">
+                    Lowercase letters, numbers, and underscores only. Spaces will be converted to underscores.
+                  </p>
                 </div>
                 <div className="space-y-3">
                   <Label className="technical-label">Category</Label>
                   <Select
                     value={formData.category}
                     onValueChange={(value) => setFormData({ ...formData, category: value as TemplateCategory })}
+                    disabled={isEditMode}
                   >
                     <SelectTrigger className="bg-background border-none h-12 px-4 rounded-xl font-bold focus:ring-primary">
                       <SelectValue placeholder="Select category" />
@@ -188,11 +283,11 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted }:
               {loading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Submitting...
+                  {isEditMode ? 'Saving...' : 'Submitting...'}
                 </>
               ) : (
                 <>
-                  Submit for Meta Approval
+                  {isEditMode ? 'Save Changes' : 'Submit for Meta Approval'}
                   <Send size={18} />
                 </>
               )}

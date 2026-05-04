@@ -36,6 +36,8 @@ public class TemplateEntity {
 
     private String rejectionReason;
 
+    private String metaError;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

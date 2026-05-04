@@ -50,12 +50,14 @@ public class MetaApiClient {
         bodyComponent.put("text", content);
 
         if (variables != null && !variables.isEmpty()) {
-            List<Map<String, Object>> bodyExamples = new ArrayList<>();
             List<String> exampleValues = variables.stream()
                     .map(v -> v.getOrDefault("example", v.getOrDefault("text", "")))
                     .toList();
-            bodyExamples.add(Map.of("body_text", exampleValues));
-            bodyComponent.put("examples", bodyExamples);
+            // Meta expects: example: { body_text: [ ["val1", "val2"] ] }
+            Map<String, Object> example = new HashMap<>();
+            example.put("body_text", List.of(exampleValues));
+            bodyComponent.put("example", example);
+            body.put("parameter_format", "POSITIONAL");
         }
 
         components.add(bodyComponent);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,9 +27,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { listTemplates, deleteTemplate } from '@/api/templates';
+import { listTemplates, deleteTemplate, resubmitTemplate } from '@/api/templates';
 import type { Template, TemplateCategory, TemplateStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
+import { ApiClientError } from '@/api/client';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Marketing: Tag,
@@ -60,15 +61,17 @@ const STATUS_VARIANTS: Record<string, string> = {
 
 interface TemplatesPageProps {
   onNavigate: (page: PageId) => void;
+  onEditTemplate: (templateId: number) => void;
 }
 
-export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
+export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesPageProps) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TemplateStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
+  const [resubmittingId, setResubmittingId] = useState<number | null>(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -102,8 +105,65 @@ export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
     }
   };
 
+  const handleResubmit = async (id: number) => {
+    setResubmittingId(id);
+    setError(null);
+    try {
+      await resubmitTemplate(id);
+      await fetchTemplates();
+    } catch (err) {
+      let message = 'Failed to resubmit template';
+      if (err instanceof ApiClientError && err.apiError) {
+        message = err.apiError.message || message;
+        if (err.apiError.details && typeof err.apiError.details === 'object') {
+          const details = err.apiError.details as Record<string, unknown>;
+          if (details.metaError) {
+            try {
+              const metaError = JSON.parse(details.metaError as string);
+              if (metaError.error && metaError.error.error_user_msg) {
+                message = metaError.error.error_user_msg;
+              }
+            } catch {
+              // If not JSON, use raw
+              message = details.metaError as string;
+            }
+          }
+        }
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
+    } finally {
+      setResubmittingId(null);
+    }
+  };
+
   const handleRefresh = () => {
     fetchTemplates();
+  };
+
+  const getMetaErrorMessage = (metaError?: string): string | null => {
+    if (!metaError) return null;
+    try {
+      const parsed = JSON.parse(metaError);
+      if (parsed.error && parsed.error.error_user_msg) {
+        return parsed.error.error_user_msg;
+      }
+      if (parsed.error && parsed.error.message) {
+        return parsed.error.message;
+      }
+    } catch {
+      // Not JSON, return raw
+    }
+    return metaError;
+  };
+
+  const canResubmit = (template: Template): boolean => {
+    return template.status === 'REJECTED' || (template.status === 'PENDING' && !!template.metaError);
+  };
+
+  const canEdit = (template: Template): boolean => {
+    return template.status === 'DRAFT' || template.status === 'REJECTED' || (template.status === 'PENDING' && !!template.metaError);
   };
 
   return (
@@ -194,6 +254,8 @@ export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
             const Icon = CATEGORY_ICONS[template.category] || MessageSquare;
             const iconColor = CATEGORY_COLORS[template.category] || 'bg-muted text-muted-foreground';
             const statusVariant = STATUS_VARIANTS[template.status] || '';
+            const metaErrorMsg = getMetaErrorMessage(template.metaError);
+            const isResubmitting = resubmittingId === template.id;
 
             return (
               <Card key={template.id} className="group border-none shadow-sm hover:shadow-2xl hover:shadow-primary/5 transition-all flex flex-col h-full relative overflow-hidden rounded-2xl">
@@ -218,25 +280,39 @@ export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
 
                 <CardContent className="p-6 pt-0 flex flex-col flex-grow">
                   <div className={cn(
-                    "bg-muted/30 rounded-xl p-4 mb-6 flex-grow border-l-4",
-                    template.status === 'REJECTED' ? "border-destructive/20" : "border-primary/20"
+                    "bg-muted/30 rounded-xl p-4 mb-4 flex-grow border-l-4",
+                    template.status === 'REJECTED' || metaErrorMsg ? "border-destructive/20" : "border-primary/20"
                   )}>
                     <p className="text-xs font-medium text-muted-foreground leading-relaxed italic line-clamp-4">
                       {template.content}
                     </p>
                   </div>
 
+                  {/* Meta Error Display */}
+                  {metaErrorMsg && (
+                    <div className="mb-4 p-3 bg-destructive/5 rounded-xl border border-destructive/10">
+                      <div className="flex items-start gap-2">
+                        <XCircle size={14} className="text-destructive mt-0.5 shrink-0" />
+                        <p className="text-[11px] font-medium text-destructive leading-relaxed">
+                          {metaErrorMsg}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div className="flex items-center gap-4 text-muted-foreground">
-                      {template.status === 'PENDING' ? (
+                      {template.status === 'PENDING' && !metaErrorMsg ? (
                         <div className="flex items-center gap-1">
                           <RefreshCw size={12} className="animate-spin-slow" />
                           <span className="text-[11px] font-bold italic">Awaiting approval</span>
                         </div>
-                      ) : template.status === 'REJECTED' ? (
+                      ) : template.status === 'REJECTED' || metaErrorMsg ? (
                         <div className="flex items-center gap-2 text-destructive">
                           <AlertCircle size={14} />
-                          <span className="text-[11px] font-bold">Policy violation</span>
+                          <span className="text-[11px] font-bold">
+                            {template.status === 'REJECTED' ? 'Policy violation' : 'Submission failed'}
+                          </span>
                         </div>
                       ) : (
                         <>
@@ -254,18 +330,36 @@ export default function TemplatesPage({ onNavigate }: TemplatesPageProps) {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10">
-                          {template.status === 'REJECTED' ? <RefreshCw size={18} /> :
-                           template.status === 'PENDING' ? <Edit3 size={18} /> :
+                          {canResubmit(template) ? <RefreshCw size={18} /> :
+                           canEdit(template) ? <Edit3 size={18} /> :
                            <MoreVertical size={18} />}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onNavigate('template-builder')}>
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onNavigate('template-builder')}>
-                          Edit Template
-                        </DropdownMenuItem>
+                        {canResubmit(template) && (
+                          <DropdownMenuItem
+                            onClick={() => handleResubmit(template.id)}
+                            disabled={isResubmitting}
+                          >
+                            {isResubmitting ? (
+                              <>
+                                <Loader2 size={14} className="mr-2 animate-spin" />
+                                Resubmitting...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw size={14} className="mr-2" />
+                                Resubmit for Approval
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        )}
+                        {canEdit(template) && (
+                          <DropdownMenuItem onClick={() => onEditTemplate(template.id)}>
+                            <Edit3 size={14} className="mr-2" />
+                            Edit Template
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => handleDelete(template.id)} className="text-destructive">
                           Delete
                         </DropdownMenuItem>

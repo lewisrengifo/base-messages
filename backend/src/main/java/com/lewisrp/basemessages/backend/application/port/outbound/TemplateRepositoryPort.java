@@ -51,6 +51,11 @@ public interface TemplateRepositoryPort {
     Mono<Boolean> existsByName(String name);
 
     /**
+     * Check if template with name exists excluding the given id.
+     */
+    Mono<Boolean> existsByNameAndIdNot(String name, Long id);
+
+    /**
      * Count templates by status.
      */
     Mono<Long> countByStatus(String status);

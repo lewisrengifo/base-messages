@@ -26,6 +26,7 @@ public class Template {
     private String metaTemplateId;
     private List<TemplateVariable> variables;
     private String rejectionReason;
+    private String metaError;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -63,16 +64,22 @@ public class Template {
 
     /**
      * Check if template can be updated.
+     * Also allows updating pending templates that had a previous submission error.
      */
     public boolean canBeUpdated() {
-        return status == TemplateStatus.DRAFT || status == TemplateStatus.REJECTED;
+        return status == TemplateStatus.DRAFT
+                || status == TemplateStatus.REJECTED
+                || (status == TemplateStatus.PENDING && metaError != null);
     }
 
     /**
      * Check if template can be resubmitted.
+     * Allows resubmission for rejected templates or pending templates
+     * that previously failed submission (have a metaError).
      */
     public boolean canBeResubmitted() {
-        return status == TemplateStatus.REJECTED;
+        return status == TemplateStatus.REJECTED
+                || (status == TemplateStatus.PENDING && metaError != null);
     }
 
     /**
