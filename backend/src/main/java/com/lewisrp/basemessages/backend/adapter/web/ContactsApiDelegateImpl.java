@@ -3,6 +3,7 @@ package com.lewisrp.basemessages.backend.adapter.web;
 import com.lewisrp.basemessages.backend.application.dto.ContactDto;
 import com.lewisrp.basemessages.backend.application.dto.ContactPageDto;
 import com.lewisrp.basemessages.backend.application.dto.CreateContactCommand;
+import com.lewisrp.basemessages.backend.application.dto.UpdateContactCommand;
 import com.lewisrp.basemessages.backend.application.service.ContactApplicationService;
 import org.openapitools.api.ContactsApiDelegate;
 import org.openapitools.model.Contact;
@@ -10,6 +11,7 @@ import org.openapitools.model.ContactDetail;
 import org.openapitools.model.ContactListResponse;
 import org.openapitools.model.CreateContactRequest;
 import org.openapitools.model.Pagination;
+import org.openapitools.model.UpdateContactRequest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -97,8 +99,38 @@ public class ContactsApiDelegateImpl implements ContactsApiDelegate {
                         e -> Mono.just(ResponseEntity.notFound().build()));
     }
 
+    @Override
+    public Mono<ResponseEntity<Contact>> contactsIdPut(
+            Integer id,
+            Mono<UpdateContactRequest> updateContactRequest,
+            ServerWebExchange exchange) {
+        return updateContactRequest
+                .map(this::toUpdateCommand)
+                .flatMap(command -> contactService.updateContact(Long.valueOf(id), command))
+                .map(this::toApiModel)
+                .map(ResponseEntity::ok)
+                .onErrorResume(ContactApplicationService.NotFoundException.class,
+                        e -> Mono.just(ResponseEntity.notFound().build()))
+                .onErrorResume(IllegalStateException.class,
+                        e -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()))
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> Mono.just(ResponseEntity.badRequest().build()));
+    }
+
+    @Override
+    public Mono<ResponseEntity<Void>> contactsIdDelete(Integer id, ServerWebExchange exchange) {
+        return contactService.deleteContact(Long.valueOf(id))
+                .then(Mono.just(ResponseEntity.noContent().<Void>build()))
+                .onErrorResume(ContactApplicationService.NotFoundException.class,
+                        e -> Mono.just(ResponseEntity.notFound().build()));
+    }
+
     private CreateContactCommand toCommand(CreateContactRequest request) {
         return new CreateContactCommand(request.getName(), request.getPhone(), request.getEmail());
+    }
+
+    private UpdateContactCommand toUpdateCommand(UpdateContactRequest request) {
+        return new UpdateContactCommand(request.getName(), request.getPhone(), request.getEmail());
     }
 
     private Contact toApiModel(ContactDto dto) {

@@ -37,6 +37,8 @@ public interface ContactR2dbcRepository extends ReactiveCrudRepository<ContactEn
 
     Mono<Boolean> existsByUserIdAndPhone(Long userId, String phone);
 
+    Mono<Boolean> existsByUserIdAndPhoneAndIdNot(Long userId, String phone, Long id);
+
     Mono<Long> countByUserId(Long userId);
 
     @Query("""

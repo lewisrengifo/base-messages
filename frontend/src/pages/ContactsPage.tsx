@@ -1,5 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { UserPlus, Search, MoreVertical, ChevronLeft, ChevronRight, Loader2, AlertCircle, CheckCircle2, Users } from 'lucide-react';
+import {
+  UserPlus,
+  Search,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Users,
+  Eye,
+  Pencil,
+  Trash2,
+  X,
+  Mail,
+  Phone,
+  Clock,
+  User,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -29,8 +47,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { createContact, listContacts } from '@/api/contacts';
-import type { Contact, Pagination } from '@/api/types';
+import { createContact, deleteContact, getContact, listContacts, updateContact } from '@/api/contacts';
+import type { Contact, ContactDetail, Pagination } from '@/api/types';
 
 const PAGE_SIZE = 20;
 const E164_PATTERN = /^\+[1-9]\d{1,14}$/;
@@ -40,16 +58,35 @@ export default function ContactsPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
   const [page, setPage] = useState(1);
 
+  // Create dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
+  const [createFormData, setCreateFormData] = useState({ name: '', phone: '', email: '' });
+
+  // View dialog state
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [viewingContact, setViewingContact] = useState<ContactDetail | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+
+  // Edit dialog state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editFormData, setEditFormData] = useState({ name: '', phone: '', email: '' });
+  const [updating, setUpdating] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete dialog state
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchContacts = useCallback(async () => {
     setLoading(true);
@@ -73,6 +110,14 @@ export default function ContactsPage() {
     fetchContacts();
   }, [fetchContacts]);
 
+  // Auto-clear success messages
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
   const canGoPrev = pagination?.hasPrev ?? page > 1;
   const canGoNext = pagination?.hasNext ?? false;
 
@@ -89,14 +134,14 @@ export default function ContactsPage() {
     setActiveSearch(searchInput.trim());
   };
 
+  // Create
   const handleCreateContact = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
-    setCreateSuccess(null);
 
-    const name = formData.name.trim();
-    const phone = formData.phone.trim();
-    const email = formData.email.trim();
+    const name = createFormData.name.trim();
+    const phone = createFormData.phone.trim();
+    const email = createFormData.email.trim();
 
     if (!name) {
       setCreateError('Name is required');
@@ -109,13 +154,9 @@ export default function ContactsPage() {
 
     setCreating(true);
     try {
-      await createContact({
-        name,
-        phone,
-        email: email || undefined,
-      });
-      setCreateSuccess('Contact created successfully');
-      setFormData({ name: '', phone: '', email: '' });
+      await createContact({ name, phone, email: email || undefined });
+      setSuccess('Contact created successfully');
+      setCreateFormData({ name: '', phone: '', email: '' });
       setIsCreateOpen(false);
       setPage(1);
       await fetchContacts();
@@ -123,6 +164,94 @@ export default function ContactsPage() {
       setCreateError(err instanceof Error ? err.message : 'Failed to create contact');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // View
+  const openView = async (contact: Contact) => {
+    setViewLoading(true);
+    setIsViewOpen(true);
+    try {
+      const detail = await getContact(contact.id);
+      setViewingContact(detail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load contact details');
+      setIsViewOpen(false);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  // Edit
+  const openEdit = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditFormData({ name: contact.name, phone: contact.phone, email: '' });
+    setEditError(null);
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContact) return;
+    setEditError(null);
+
+    const name = editFormData.name.trim();
+    const phone = editFormData.phone.trim();
+    const email = editFormData.email.trim();
+
+    if (!name) {
+      setEditError('Name is required');
+      return;
+    }
+    if (!E164_PATTERN.test(phone)) {
+      setEditError('Phone must be in E.164 format, for example +15550123456');
+      return;
+    }
+
+    const payload: { name?: string; phone?: string; email?: string } = {};
+    if (name !== editingContact.name) payload.name = name;
+    if (phone !== editingContact.phone) payload.phone = phone;
+    if (email) payload.email = email;
+
+    // If nothing changed, just close
+    if (Object.keys(payload).length === 0) {
+      setIsEditOpen(false);
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      await updateContact(editingContact.id, payload);
+      setSuccess('Contact updated successfully');
+      setIsEditOpen(false);
+      await fetchContacts();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update contact');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Delete
+  const openDelete = (contact: Contact) => {
+    setDeletingContact(contact);
+    setDeleteError(null);
+    setIsDeleteOpen(true);
+  };
+
+  const handleDeleteContact = async () => {
+    if (!deletingContact) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deleteContact(deletingContact.id);
+      setSuccess('Contact deleted successfully');
+      setIsDeleteOpen(false);
+      await fetchContacts();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete contact');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -165,8 +294,8 @@ export default function ContactsPage() {
                   <Label htmlFor="contact-name">Name</Label>
                   <Input
                     id="contact-name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    value={createFormData.name}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Jane Doe"
                     required
                   />
@@ -175,8 +304,8 @@ export default function ContactsPage() {
                   <Label htmlFor="contact-phone">Phone (E.164)</Label>
                   <Input
                     id="contact-phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    value={createFormData.phone}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, phone: e.target.value }))}
                     placeholder="+15550123456"
                     required
                   />
@@ -186,8 +315,8 @@ export default function ContactsPage() {
                   <Input
                     id="contact-email"
                     type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    value={createFormData.email}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, email: e.target.value }))}
                     placeholder="jane@example.com"
                   />
                 </div>
@@ -209,10 +338,10 @@ export default function ContactsPage() {
         </Alert>
       )}
 
-      {createSuccess && (
+      {success && (
         <Alert className="bg-emerald-50 text-emerald-800 border-emerald-200">
           <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>{createSuccess}</AlertDescription>
+          <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
 
@@ -277,8 +406,21 @@ export default function ContactsPage() {
                             }
                           />
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>View Details</DropdownMenuItem>
-                            <DropdownMenuItem disabled>Edit Contact (Phase 3)</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openView(contact)}>
+                              <Eye size={14} className="mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEdit(contact)}>
+                              <Pencil size={14} className="mr-2" />
+                              Edit Contact
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => openDelete(contact)}
+                              className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                            >
+                              <Trash2 size={14} className="mr-2" />
+                              Delete Contact
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -314,6 +456,133 @@ export default function ContactsPage() {
           </div>
         </div>
       </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Contact Details</DialogTitle>
+          </DialogHeader>
+          {viewLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : viewingContact ? (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <Avatar className={viewingContact.color}>
+                  <AvatarFallback className="bg-transparent font-bold text-sm">{viewingContact.initials}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-bold text-lg">{viewingContact.name}</p>
+                  <p className="text-sm text-muted-foreground">ID: {viewingContact.id}</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone size={16} className="text-muted-foreground" />
+                  <span className="font-mono">{viewingContact.phone}</span>
+                </div>
+                {viewingContact.email && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Mail size={16} className="text-muted-foreground" />
+                    <span>{viewingContact.email}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-3 text-sm">
+                  <Clock size={16} className="text-muted-foreground" />
+                  <span>Created {new Date(viewingContact.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Contact</DialogTitle>
+            <DialogDescription>
+              Update contact information.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{editError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleUpdateContact} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Jane Doe"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone (E.164)</Label>
+              <Input
+                id="edit-phone"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="+15550123456"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email (optional)</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="jane@example.com"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={updating} className="w-full sm:w-auto">
+                {updating ? <Loader2 size={16} className="animate-spin" /> : 'Update Contact'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Contact</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <span className="font-bold">{deletingContact?.name}</span>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteContact} disabled={deleting}>
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : 'Delete Contact'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

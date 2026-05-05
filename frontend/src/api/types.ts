@@ -209,6 +209,12 @@ export interface CreateContactRequest {
   email?: string;
 }
 
+export interface UpdateContactRequest {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
 // ============================================================================
 // Dashboard Types (Phase 3)
 // ============================================================================

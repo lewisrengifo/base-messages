@@ -18,7 +18,13 @@ public interface ContactRepositoryPort {
 
     Mono<Contact> save(Contact contact);
 
+    Mono<Contact> update(Contact contact);
+
+    Mono<Void> deleteById(Long id);
+
     Mono<Boolean> existsByPhone(Long userId, String phone);
+
+    Mono<Boolean> existsByPhoneAndIdNot(Long userId, String phone, Long id);
 
     Mono<Long> countAll();
 

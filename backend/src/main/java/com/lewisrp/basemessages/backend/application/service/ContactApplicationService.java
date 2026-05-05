@@ -3,6 +3,7 @@ package com.lewisrp.basemessages.backend.application.service;
 import com.lewisrp.basemessages.backend.application.dto.ContactDto;
 import com.lewisrp.basemessages.backend.application.dto.ContactPageDto;
 import com.lewisrp.basemessages.backend.application.dto.CreateContactCommand;
+import com.lewisrp.basemessages.backend.application.dto.UpdateContactCommand;
 import com.lewisrp.basemessages.backend.application.port.outbound.ContactRepositoryPort;
 import com.lewisrp.basemessages.backend.domain.model.Contact;
 import org.springframework.data.domain.Pageable;
@@ -92,6 +93,55 @@ public class ContactApplicationService {
         return contactRepository.findById(id)
                 .map(this::toDto)
                 .switchIfEmpty(Mono.error(new NotFoundException("Contact not found with id: " + id)));
+    }
+
+    public Mono<ContactDto> updateContact(Long id, UpdateContactCommand command) {
+        return contactRepository.findById(id)
+                .switchIfEmpty(Mono.error(new NotFoundException("Contact not found with id: " + id)))
+                .flatMap(existing -> {
+                    String normalizedName = command.getName() != null ? command.getName().trim() : null;
+                    String normalizedPhone = command.getPhone() != null ? command.getPhone().trim() : null;
+                    String normalizedEmail = command.getEmail() != null && !command.getEmail().isBlank()
+                            ? command.getEmail().trim()
+                            : null;
+
+                    if (normalizedName != null && normalizedName.isEmpty()) {
+                        return Mono.error(new IllegalArgumentException("Contact name is required"));
+                    }
+                    if (normalizedPhone != null && !E164_PATTERN.matcher(normalizedPhone).matches()) {
+                        return Mono.error(new IllegalArgumentException("Phone must be in E.164 format (e.g. +15550123456)"));
+                    }
+
+                    // Check phone uniqueness if changed
+                    Mono<Boolean> phoneCheck = Mono.just(false);
+                    if (normalizedPhone != null && !normalizedPhone.equals(existing.getPhone())) {
+                        phoneCheck = contactRepository.existsByPhoneAndIdNot(MVP_USER_ID, normalizedPhone, id);
+                    }
+
+                    return phoneCheck.flatMap(exists -> {
+                        if (exists) {
+                            return Mono.error(new IllegalStateException("Contact with this phone number already exists"));
+                        }
+
+                        if (normalizedName != null) {
+                            existing.setName(normalizedName);
+                            existing.setInitials(generateInitials(normalizedName));
+                            existing.setColor(pickColor(normalizedName));
+                        }
+                        if (normalizedPhone != null) {
+                            existing.setPhone(normalizedPhone);
+                        }
+                        existing.setEmail(normalizedEmail);
+
+                        return contactRepository.update(existing).map(this::toDto);
+                    });
+                });
+    }
+
+    public Mono<Void> deleteContact(Long id) {
+        return contactRepository.findById(id)
+                .switchIfEmpty(Mono.error(new NotFoundException("Contact not found with id: " + id)))
+                .flatMap(contact -> contactRepository.deleteById(id));
     }
 
     private ContactDto toDto(Contact contact) {

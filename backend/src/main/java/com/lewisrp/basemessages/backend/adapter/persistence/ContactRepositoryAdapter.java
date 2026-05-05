@@ -64,8 +64,23 @@ public class ContactRepositoryAdapter implements ContactRepositoryPort {
     }
 
     @Override
+    public Mono<Contact> update(Contact contact) {
+        return save(contact);
+    }
+
+    @Override
+    public Mono<Void> deleteById(Long id) {
+        return contactRepository.deleteById(id);
+    }
+
+    @Override
     public Mono<Boolean> existsByPhone(Long userId, String phone) {
         return contactRepository.existsByUserIdAndPhone(userId, phone);
+    }
+
+    @Override
+    public Mono<Boolean> existsByPhoneAndIdNot(Long userId, String phone, Long id) {
+        return contactRepository.existsByUserIdAndPhoneAndIdNot(userId, phone, id);
     }
 
     @Override

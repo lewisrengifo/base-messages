@@ -5,7 +5,7 @@
  */
 
 import { apiClient } from './client';
-import type { Contact, ContactDetail, ContactListResponse, CreateContactRequest } from './types';
+import type { Contact, ContactDetail, ContactListResponse, CreateContactRequest, UpdateContactRequest } from './types';
 
 const CONTACTS_ENDPOINT = '/contacts';
 
@@ -32,4 +32,12 @@ export async function getContact(id: number): Promise<ContactDetail> {
 
 export async function createContact(data: CreateContactRequest): Promise<Contact> {
   return apiClient.post<Contact>(CONTACTS_ENDPOINT, data);
+}
+
+export async function updateContact(id: number, data: UpdateContactRequest): Promise<Contact> {
+  return apiClient.put<Contact>(`${CONTACTS_ENDPOINT}/${id}`, data);
+}
+
+export async function deleteContact(id: number): Promise<void> {
+  return apiClient.delete<void>(`${CONTACTS_ENDPOINT}/${id}`);
 }
