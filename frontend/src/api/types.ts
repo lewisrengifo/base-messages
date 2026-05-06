@@ -148,16 +148,14 @@ export interface ConnectionTestResponse {
 // Campaign Types (Phase 3)
 // ============================================================================
 
-export type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'SENT' | 'CANCELED' | 'FAILED';
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'canceled' | 'failed';
 
 export interface Campaign {
   id: string;
   name: string;
-  templateId: number;
   templateName: string;
   scheduledDate?: string;
   status: CampaignStatus;
-  audienceSize: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -167,11 +165,30 @@ export interface CampaignListResponse {
   pagination: Pagination;
 }
 
+export interface CampaignDetail extends Campaign {
+  template?: Template;
+  audience?: {
+    group?: string;
+    recipientCount?: number;
+  };
+  schedule?: {
+    date?: string;
+    time?: string;
+  };
+}
+
 export interface CreateCampaignRequest {
   name: string;
   templateId: number;
-  scheduledDate?: string;
-  contactIds: number[];
+  audience: {
+    type: 'all' | 'group' | 'segment';
+    groupId?: string;
+  };
+  schedule: {
+    type: 'immediate' | 'scheduled';
+    date?: string;
+    time?: string;
+  };
 }
 
 // ============================================================================

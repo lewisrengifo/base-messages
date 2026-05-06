@@ -116,6 +116,89 @@ public class MetaApiClient {
             String rejectionReason
     ) {}
 
+    public Mono<SendResult> sendTemplateMessage(
+            String phoneNumberId,
+            String accessToken,
+            String toPhone,
+            String templateName,
+            String languageCode,
+            List<String> variableValues) {
+
+        String url = String.format("/%s/messages", phoneNumberId);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("messaging_product", "whatsapp");
+        body.put("recipient_type", "individual");
+        body.put("to", toPhone);
+        body.put("type", "template");
+
+        Map<String, Object> template = new HashMap<>();
+        template.put("name", templateName);
+        Map<String, String> language = new HashMap<>();
+        language.put("code", languageCode);
+        template.put("language", language);
+
+        if (variableValues != null && !variableValues.isEmpty()) {
+            List<Map<String, Object>> parameters = new ArrayList<>();
+            for (String value : variableValues) {
+                Map<String, Object> param = new HashMap<>();
+                param.put("type", "text");
+                param.put("text", value);
+                parameters.add(param);
+            }
+            Map<String, Object> component = new HashMap<>();
+            component.put("type", "body");
+            component.put("parameters", parameters);
+            template.put("components", List.of(component));
+        }
+
+        body.put("template", template);
+
+        return webClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path(url)
+                        .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .map(response -> {
+                    log.info("Message sent successfully: {}", response);
+                    String metaMessageId = null;
+                    if (response.get("messages") instanceof List messages && !messages.isEmpty()) {
+                        Object first = messages.get(0);
+                        if (first instanceof Map msgMap) {
+                            metaMessageId = msgMap.get("id") != null ? String.valueOf(msgMap.get("id")) : null;
+                        }
+                    }
+                    return SendResult.success(metaMessageId);
+                })
+                .onErrorResume(error -> {
+                    log.error("Message sending failed: {}", error.getMessage(), error);
+                    String errorMessage = error.getMessage();
+                    if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException webEx) {
+                        String responseBody = webEx.getResponseBodyAsString();
+                        log.error("Meta API error response: {}", responseBody);
+                        errorMessage = responseBody;
+                    }
+                    return Mono.just(SendResult.failure(errorMessage));
+                });
+    }
+
+    public record SendResult(
+            boolean success,
+            String metaMessageId,
+            String errorMessage
+    ) {
+        public static SendResult success(String metaMessageId) {
+            return new SendResult(true, metaMessageId, null);
+        }
+
+        public static SendResult failure(String errorMessage) {
+            return new SendResult(false, null, errorMessage);
+        }
+    }
+
     public Mono<Boolean> testConnection(String wabaId, String phoneNumberId, String accessToken) {
         String targetId = (wabaId != null && !wabaId.isBlank()) ? wabaId : phoneNumberId;
         if (targetId == null || targetId.isBlank()) {

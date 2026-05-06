@@ -12,6 +12,7 @@ export * from './templates';
 export * from './connection';
 export * from './auth';
 export * from './contacts';
+export * from './campaigns';
 
 // Types
 export * from './types';

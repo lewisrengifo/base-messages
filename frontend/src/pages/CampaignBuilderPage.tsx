@@ -10,11 +10,28 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PageId } from '../components/Layout';
 import { listContacts } from '@/api/contacts';
-import type { Contact } from '@/api/types';
+import { listTemplates } from '@/api/templates';
+import { createCampaign } from '@/api/campaigns';
+import type { Contact, Template } from '@/api/types';
+import { ApiClientError } from '@/api/client';
 
-export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+interface CampaignBuilderPageProps {
+  onNavigate: (page: PageId) => void;
+}
+
+export default function CampaignBuilderPage({ onNavigate }: CampaignBuilderPageProps) {
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Template state
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+
+  // Audience state
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
@@ -22,7 +39,26 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
   const [selectedContactIds, setSelectedContactIds] = useState<number[]>([]);
   const [audienceSearch, setAudienceSearch] = useState('');
 
+  // Schedule state
+  const [scheduleType, setScheduleType] = useState<'immediate' | 'scheduled'>('immediate');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [campaignName, setCampaignName] = useState('');
+
   useEffect(() => {
+    const fetchTemplates = async () => {
+      setTemplatesLoading(true);
+      setTemplatesError(null);
+      try {
+        const response = await listTemplates({ status: 'APPROVED', limit: 200 });
+        setTemplates(response.data);
+      } catch (err) {
+        setTemplatesError(err instanceof Error ? err.message : 'Failed to load templates');
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
     const fetchContacts = async () => {
       setContactsLoading(true);
       setContactsError(null);
@@ -36,8 +72,15 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
       }
     };
 
+    fetchTemplates();
     fetchContacts();
   }, []);
+
+  const filteredTemplates = useMemo(() => {
+    const query = templateSearch.trim().toLowerCase();
+    if (!query) return templates;
+    return templates.filter((t) => t.name.toLowerCase().includes(query));
+  }, [templates, templateSearch]);
 
   const filteredContacts = useMemo(() => {
     const query = audienceSearch.trim().toLowerCase();
@@ -48,6 +91,35 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
   }, [contacts, audienceSearch]);
 
   const recipientCount = audienceType === 'all' ? contacts.length : selectedContactIds.length;
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+
+  const handleLaunch = async () => {
+    if (!selectedTemplateId || !campaignName.trim()) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await createCampaign({
+        name: campaignName.trim(),
+        templateId: selectedTemplateId,
+        audience: {
+          type: 'all',
+        },
+        schedule: {
+          type: scheduleType,
+          date: scheduleDate || undefined,
+          time: scheduleTime || undefined,
+        },
+      });
+      onNavigate('campaign-sent');
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'Failed to create campaign';
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const steps = [
     { id: 1, label: 'Template Selection', icon: FileText },
@@ -76,6 +148,13 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
           Configure and launch your WhatsApp broadcast. Reach your audience with approved templates and precise scheduling.
         </p>
       </header>
+
+      {submitError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{submitError}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {steps.map((s) => (
@@ -113,29 +192,57 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-8 space-y-6">
+                {templatesError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{templatesError}</AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                   <Input
                     placeholder="Search templates..."
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
                     className="pl-12 h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {['Order Confirmation', 'Marketing Sale', '2FA Login'].map((t) => (
-                    <div
-                      key={t}
-                      className="p-6 rounded-2xl border-2 border-muted hover:border-primary/40 cursor-pointer transition-all group bg-muted/10"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 uppercase text-[10px] font-bold">Approved</Badge>
-                        <ChevronRight className="text-muted-foreground group-hover:text-primary transition-colors" size={18} />
+                {templatesLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : filteredTemplates.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No approved templates found. Create and approve a template first.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        className={cn(
+                          "p-6 rounded-2xl border-2 cursor-pointer transition-all group bg-muted/10",
+                          selectedTemplateId === template.id
+                            ? "border-primary bg-primary/5"
+                            : "border-muted hover:border-primary/40"
+                        )}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 uppercase text-[10px] font-bold">{template.status}</Badge>
+                          <ChevronRight className={cn(
+                            "transition-colors",
+                            selectedTemplateId === template.id ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                          )} size={18} />
+                        </div>
+                        <h3 className="font-bold text-lg mb-1">{template.name}</h3>
+                        <p className="text-xs text-muted-foreground">{template.category} • {template.language}</p>
                       </div>
-                      <h3 className="font-bold text-lg mb-1">{t}</h3>
-                      <p className="text-xs text-muted-foreground">Utility • EN_US</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -248,16 +355,51 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-8 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Launch Date</Label>
-                    <Input type="date" className="h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20" />
-                  </div>
-                  <div className="space-y-4">
-                    <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Launch Time</Label>
-                    <Input type="time" className="h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20" />
-                  </div>
+                <div className="space-y-4">
+                  <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Campaign Name</Label>
+                  <Input
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    placeholder="e.g. Summer Flash Sale"
+                    className="h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20"
+                  />
                 </div>
+
+                <div className="space-y-4">
+                  <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Launch Type</Label>
+                  <Select value={scheduleType} onValueChange={(value) => setScheduleType(value as 'immediate' | 'scheduled')}>
+                    <SelectTrigger className="h-14 rounded-2xl bg-muted/30 border-none focus:ring-primary/20">
+                      <SelectValue placeholder="Choose launch type..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="immediate">Send Immediately</SelectItem>
+                      <SelectItem value="scheduled">Schedule for Later</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {scheduleType === 'scheduled' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Launch Date</Label>
+                      <Input
+                        type="date"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        className="h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20"
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <Label className="text-sm font-bold uppercase tracking-widest opacity-60">Launch Time</Label>
+                      <Input
+                        type="time"
+                        value={scheduleTime}
+                        onChange={(e) => setScheduleTime(e.target.value)}
+                        className="h-14 rounded-2xl bg-muted/30 border-none focus-visible:ring-primary/20"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-8 rounded-3xl bg-muted/30 border-2 border-dashed border-muted-foreground/20 text-center space-y-4">
                   <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto text-primary">
@@ -286,6 +428,7 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
             {step < 3 ? (
               <Button
                 onClick={() => setStep(s => s + 1)}
+                disabled={step === 1 && !selectedTemplateId}
                 className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95"
               >
                 Next Step
@@ -293,11 +436,21 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
               </Button>
             ) : (
               <Button
-                onClick={() => onNavigate('campaign-sent')}
+                onClick={handleLaunch}
+                disabled={isSubmitting || !campaignName.trim() || (scheduleType === 'scheduled' && (!scheduleDate || !scheduleTime))}
                 className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95 bg-emerald-600 hover:bg-emerald-700"
               >
-                Launch Campaign
-                <Send size={18} />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Launching...
+                  </>
+                ) : (
+                  <>
+                    Launch Campaign
+                    <Send size={18} />
+                  </>
+                )}
               </Button>
             )}
           </div>
@@ -312,11 +465,11 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Template</span>
-                  <span className="font-bold">{step > 1 ? 'Order Confirmation' : 'Not selected'}</span>
+                  <span className="font-bold">{selectedTemplate?.name || 'Not selected'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Audience</span>
-                  <span className="font-bold">{step > 2 ? (audienceType === 'all' ? 'All Contacts' : 'Manual Selection') : 'Not selected'}</span>
+                  <span className="font-bold">{step > 1 ? (audienceType === 'all' ? 'All Contacts' : 'Manual Selection') : 'Not selected'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Recipients</span>
@@ -324,7 +477,7 @@ export default function CampaignBuilderPage({ onNavigate }: { onNavigate: (page:
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Schedule</span>
-                  <span className="font-bold">{step === 3 ? 'Immediate' : 'Not set'}</span>
+                  <span className="font-bold">{step === 3 ? (scheduleType === 'immediate' ? 'Immediate' : `${scheduleDate} ${scheduleTime}`) : 'Not set'}</span>
                 </div>
               </div>
 

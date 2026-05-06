@@ -1,5 +1,5 @@
-import React from 'react';
-import { TrendingUp, Verified, Clock, BarChart3, Megaphone, CheckCircle2, Calendar, XCircle, ArrowRight, MoreVertical, Edit, Copy, Trash2, Eye } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { TrendingUp, Verified, Clock, BarChart3, Megaphone, CheckCircle2, Calendar, XCircle, ArrowRight, MoreVertical, Eye, Copy, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,17 +26,97 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-const CAMPAIGNS = [
-  { id: 'CAMP-9283', name: 'Q3 Product Reveal', template: 'Modern_Dark_Theme_V2', date: 'Oct 12, 2023 • 09:00 AM', status: 'Sent', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700' },
-  { id: 'CAMP-9455', name: 'Summer Flash Sale', template: 'Discount_Hero_Grid', date: 'Oct 24, 2023 • 02:30 PM', status: 'Scheduled', icon: Calendar, color: 'bg-primary/10 text-primary' },
-  { id: 'CAMP-8112', name: 'System Maintenance Alert', template: 'Utility_Simple_Text', date: 'Oct 05, 2023 • 11:15 AM', status: 'Canceled', icon: XCircle, color: 'bg-muted text-muted-foreground' },
-  { id: 'CAMP-9002', name: 'Monthly Newsletter #42', template: 'Editorial_Layout_Rich', date: 'Sep 28, 2023 • 10:00 AM', status: 'Sent', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700' },
-];
-
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { listCampaigns, cancelCampaign, deleteCampaign, duplicateCampaign } from '@/api/campaigns';
+import type { Campaign, CampaignStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
+import { ApiClientError } from '@/api/client';
 
-export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+const STATUS_CONFIG: Record<CampaignStatus, { icon: React.ElementType; color: string; label: string }> = {
+  draft: { icon: Calendar, color: 'bg-slate-100 text-slate-700', label: 'Draft' },
+  scheduled: { icon: Calendar, color: 'bg-primary/10 text-primary', label: 'Scheduled' },
+  sending: { icon: Loader2, color: 'bg-amber-100 text-amber-700', label: 'Sending' },
+  sent: { icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700', label: 'Sent' },
+  canceled: { icon: XCircle, color: 'bg-muted text-muted-foreground', label: 'Canceled' },
+  failed: { icon: XCircle, color: 'bg-red-100 text-red-700', label: 'Failed' },
+};
+
+interface CampaignsPageProps {
+  onNavigate: (page: PageId) => void;
+}
+
+export default function CampaignsPage({ onNavigate }: CampaignsPageProps) {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchCampaigns = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await listCampaigns({ page, limit: 20 });
+      setCampaigns(response.data);
+      setTotalPages(response.pagination.totalPages);
+      setTotal(response.pagination.total);
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'Failed to load campaigns';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [fetchCampaigns]);
+
+  const handleCancel = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await cancelCampaign(id);
+      await fetchCampaigns();
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'Failed to cancel campaign';
+      setError(message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    setActionLoading(id);
+    try {
+      await deleteCampaign(id);
+      await fetchCampaigns();
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'Failed to delete campaign';
+      setError(message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDuplicate = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await duplicateCampaign(id);
+      await fetchCampaigns();
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : 'Failed to duplicate campaign';
+      setError(message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const sentCount = campaigns.filter(c => c.status === 'sent').length;
+  const scheduledCount = campaigns.filter(c => c.status === 'scheduled').length;
+
   return (
     <div className="space-y-12">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -46,7 +126,7 @@ export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageI
             Track and manage your high-performance broadcasts. Review real-time delivery metrics and optimize your message orchestration.
           </p>
         </div>
-        <Button 
+        <Button
           onClick={() => onNavigate('campaign-builder')}
           className="h-14 px-8 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2 hover:opacity-90 transition-all active:scale-95"
         >
@@ -62,10 +142,10 @@ export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageI
             <CardTitle className="technical-label">Total Sent</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <p className="text-4xl font-extrabold">124,802</p>
+            <p className="text-4xl font-extrabold">{sentCount}</p>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-secondary">
               <TrendingUp size={14} />
-              12% increase this month
+              Campaigns delivered
             </div>
           </CardContent>
         </Card>
@@ -74,10 +154,10 @@ export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageI
             <CardTitle className="technical-label">Average Open Rate</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <p className="text-4xl font-extrabold">64.2%</p>
+            <p className="text-4xl font-extrabold">--</p>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-secondary">
               <Verified size={14} />
-              Exceeding industry benchmark
+              Analytics coming soon
             </div>
           </CardContent>
         </Card>
@@ -86,14 +166,21 @@ export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageI
             <CardTitle className="technical-label">Active Scheduled</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <p className="text-4xl font-extrabold">14</p>
+            <p className="text-4xl font-extrabold">{scheduledCount}</p>
             <div className="mt-4 flex items-center gap-2 text-xs font-bold text-muted-foreground">
               <Clock size={14} />
-              Next: Summer Launch (2h)
+              Pending delivery
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Campaign Table */}
       <Card className="rounded-2xl overflow-hidden border-none shadow-sm bg-card">
@@ -109,173 +196,134 @@ export default function CampaignsPage({ onNavigate }: { onNavigate: (page: PageI
               </TableRow>
             </TableHeader>
             <TableBody>
-              {CAMPAIGNS.map((campaign) => (
-                <TableRow key={campaign.id} className="hover:bg-muted/20 transition-colors group border-b">
-                  <TableCell className="px-8 py-5">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-foreground">{campaign.name}</span>
-                      <span className="text-xs text-muted-foreground font-medium">{campaign.id}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-8 py-5 text-sm font-medium text-muted-foreground">{campaign.template}</TableCell>
-                  <TableCell className="px-8 py-5 text-sm text-muted-foreground">{campaign.date}</TableCell>
-                  <TableCell className="px-8 py-5">
-                    <div className="flex justify-center">
-                      <Badge variant="secondary" className={cn(
-                        "px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 border-none",
-                        campaign.color
-                      )}>
-                        <campaign.icon size={12} />
-                        {campaign.status}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-8 py-5 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-                          <MoreVertical size={20} />
-                        </Button>
-                      } />
-                      <DropdownMenuContent align="end" className="w-48 rounded-xl p-2">
-                        <DropdownMenuItem 
-                          onClick={() => onNavigate('campaign-analytics')}
-                          className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer"
-                        >
-                          <BarChart3 size={16} className="text-primary" />
-                          <span className="font-bold text-xs">View Analytics</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer">
-                          <Eye size={16} className="text-muted-foreground" />
-                          <span className="font-bold text-xs">Preview Message</span>
-                        </DropdownMenuItem>
-                        {campaign.status === 'Scheduled' && (
-                          <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer">
-                            <Edit size={16} className="text-muted-foreground" />
-                            <span className="font-bold text-xs">Edit Schedule</span>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer">
-                          <Copy size={16} className="text-muted-foreground" />
-                          <span className="font-bold text-xs">Duplicate</span>
-                        </DropdownMenuItem>
-                        <div className="h-px bg-muted my-1" />
-                        {campaign.status === 'Scheduled' && (
-                          <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-amber-600 focus:text-amber-600 focus:bg-amber-50">
-                            <XCircle size={16} />
-                            <span className="font-bold text-xs">Cancel Campaign</span>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">
-                          <Trash2 size={16} />
-                          <span className="font-bold text-xs">Delete Record</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="px-8 py-12 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : campaigns.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="px-8 py-12 text-center text-muted-foreground">
+                    No campaigns found. Create your first campaign to get started.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                campaigns.map((campaign) => {
+                  const config = STATUS_CONFIG[campaign.status] || STATUS_CONFIG.draft;
+                  const Icon = config.icon;
+                  return (
+                    <TableRow key={campaign.id} className="hover:bg-muted/20 transition-colors group border-b">
+                      <TableCell className="px-8 py-5">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-foreground">{campaign.name}</span>
+                          <span className="text-xs text-muted-foreground font-medium">{campaign.id}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-8 py-5 text-sm font-medium text-muted-foreground">{campaign.templateName || '-'}</TableCell>
+                      <TableCell className="px-8 py-5 text-sm text-muted-foreground">
+                        {campaign.scheduledDate ? new Date(campaign.scheduledDate).toLocaleString() : '-'}
+                      </TableCell>
+                      <TableCell className="px-8 py-5">
+                        <div className="flex justify-center">
+                          <Badge variant="secondary" className={cn(
+                            "px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 border-none",
+                            config.color
+                          )}>
+                            <Icon size={12} />
+                            {config.label}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-8 py-5 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+                              <MoreVertical size={20} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 rounded-xl p-2">
+                            <DropdownMenuItem
+                              onClick={() => onNavigate('campaign-analytics')}
+                              className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer"
+                            >
+                              <BarChart3 size={16} className="text-primary" />
+                              <span className="font-bold text-xs">View Analytics</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer">
+                              <Eye size={16} className="text-muted-foreground" />
+                              <span className="font-bold text-xs">Preview Message</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDuplicate(campaign.id)}
+                              className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer"
+                              disabled={actionLoading === campaign.id}
+                            >
+                              <Copy size={16} className="text-muted-foreground" />
+                              <span className="font-bold text-xs">Duplicate</span>
+                            </DropdownMenuItem>
+                            <div className="h-px bg-muted my-1" />
+                            {(campaign.status === 'scheduled' || campaign.status === 'draft') && (
+                              <DropdownMenuItem
+                                onClick={() => handleCancel(campaign.id)}
+                                className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-amber-600 focus:text-amber-600 focus:bg-amber-50"
+                                disabled={actionLoading === campaign.id}
+                              >
+                                <XCircle size={16} />
+                                <span className="font-bold text-xs">Cancel Campaign</span>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(campaign.id)}
+                              className="gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                              disabled={actionLoading === campaign.id}
+                            >
+                              <Trash2 size={16} />
+                              <span className="font-bold text-xs">Delete Record</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </CardContent>
-        <div className="px-8 py-4 bg-muted/30 flex items-center justify-between text-sm">
-          <span className="font-medium text-muted-foreground">Showing 4 of 128 campaigns</span>
-          <Pagination className="w-auto mx-0">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious href="#" className="h-9 px-4 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors" />
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationLink href="#" isActive className="h-9 w-9 rounded-lg bg-primary text-white font-bold">1</PaginationLink>
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationLink href="#" className="h-9 w-9 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors">2</PaginationLink>
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationNext href="#" className="h-9 px-4 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors" />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      </Card>
-
-      {/* Performance Ledger */}
-      <section className="mt-16">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Template Performance Ledger</h2>
-            <p className="text-muted-foreground text-sm mt-1">Efficiency metrics by design structure.</p>
+        {!loading && totalPages > 1 && (
+          <div className="px-8 py-4 bg-muted/30 flex items-center justify-between text-sm">
+            <span className="font-medium text-muted-foreground">Showing {campaigns.length} of {total} campaigns</span>
+            <Pagination className="w-auto mx-0">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    className="h-9 px-4 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors cursor-pointer"
+                  />
+                </PaginationItem>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => i + 1).map(p => (
+                  <PaginationItem key={p}>
+                    <PaginationLink
+                      onClick={() => setPage(p)}
+                      isActive={p === page}
+                      className="h-9 w-9 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      {p}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    className="h-9 px-4 rounded-lg bg-background border border-muted-foreground/20 hover:bg-muted transition-colors cursor-pointer"
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
-          <Button variant="link" className="text-primary font-bold text-sm hover:underline flex items-center gap-1 group p-0 h-auto">
-            View All Templates
-            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card className="p-8 rounded-3xl flex items-start gap-8 border-none border-l-8 border-primary shadow-sm bg-muted/10">
-            <div className="w-20 h-24 bg-muted rounded-xl flex-shrink-0 overflow-hidden shadow-inner">
-              <img 
-                src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&h=240&q=80" 
-                alt="Template Preview" 
-                className="w-full h-full object-cover opacity-80"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-lg">Modern_Dark_Theme_V2</h3>
-                <Badge variant="secondary" className="text-[10px] font-bold text-secondary bg-secondary/10 px-2.5 py-1 rounded-full uppercase tracking-widest border-none">High Conversion</Badge>
-              </div>
-              <div className="grid grid-cols-3 gap-6">
-                <div>
-                  <p className="technical-label mb-1">CTR</p>
-                  <p className="text-lg font-extrabold">18.4%</p>
-                </div>
-                <div>
-                  <p className="technical-label mb-1">Bounces</p>
-                  <p className="text-lg font-extrabold">0.4%</p>
-                </div>
-                <div>
-                  <p className="technical-label mb-1">Sent</p>
-                  <p className="text-lg font-extrabold">42k</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-8 rounded-3xl flex items-start gap-8 border-none border-l-8 border-muted-foreground/20 shadow-sm bg-muted/10">
-            <div className="w-20 h-24 bg-muted rounded-xl flex-shrink-0 overflow-hidden shadow-inner">
-              <img 
-                src="https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=200&h=240&q=80" 
-                alt="Template Preview" 
-                className="w-full h-full object-cover opacity-80"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-lg">Editorial_Layout_Rich</h3>
-                <Badge variant="secondary" className="text-[10px] font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-full uppercase tracking-widest border-none">Standard</Badge>
-              </div>
-              <div className="grid grid-cols-3 gap-6">
-                <div>
-                  <p className="technical-label mb-1">CTR</p>
-                  <p className="text-lg font-extrabold">12.1%</p>
-                </div>
-                <div>
-                  <p className="technical-label mb-1">Bounces</p>
-                  <p className="text-lg font-extrabold">1.2%</p>
-                </div>
-                <div>
-                  <p className="technical-label mb-1">Sent</p>
-                  <p className="text-lg font-extrabold">15k</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </section>
+        )}
+      </Card>
     </div>
   );
 }
