@@ -42,17 +42,25 @@ public class BroadcastService {
         return campaignRepository.findById(campaignId)
                 .flatMap(campaign -> {
                     if (campaign.getStatus() != Campaign.CampaignStatus.DRAFT
-                            && campaign.getStatus() != Campaign.CampaignStatus.SCHEDULED) {
+                            && campaign.getStatus() != Campaign.CampaignStatus.SCHEDULED
+                            && campaign.getStatus() != Campaign.CampaignStatus.SENDING) {
                         return Mono.error(new IllegalStateException(
                                 "Campaign cannot be executed in status: " + campaign.getStatus()));
                     }
 
-                    campaign.markSending();
-                    return campaignRepository.save(campaign)
-                            .then(Mono.zip(
-                                    templateRepository.findById(campaign.getTemplateId()),
-                                    connectionRepository.findCurrent()
-                            ))
+                    if (campaign.getStatus() != Campaign.CampaignStatus.SENDING) {
+                        campaign.markSending();
+                        return campaignRepository.save(campaign)
+                                .then(Mono.zip(
+                                        templateRepository.findById(campaign.getTemplateId()),
+                                        connectionRepository.findCurrent()
+                                ));
+                    }
+
+                    return Mono.zip(
+                            templateRepository.findById(campaign.getTemplateId()),
+                            connectionRepository.findCurrent()
+                    )
                             .flatMap(tuple -> {
                                 Template template = tuple.getT1();
                                 Connection connection = tuple.getT2();

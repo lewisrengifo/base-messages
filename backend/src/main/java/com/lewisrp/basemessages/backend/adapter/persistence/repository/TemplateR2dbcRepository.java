@@ -24,7 +24,7 @@ public interface TemplateR2dbcRepository extends ReactiveCrudRepository<Template
     /**
      * Find non-deleted templates by status.
      */
-    @Query("SELECT * FROM templates WHERE status = :status AND deleted_at IS NULL")
+    @Query("SELECT * FROM templates WHERE status = CAST(:status AS template_status) AND deleted_at IS NULL")
     Flux<TemplateEntity> findActiveByStatus(String status, Pageable pageable);
 
     /**
@@ -36,7 +36,7 @@ public interface TemplateR2dbcRepository extends ReactiveCrudRepository<Template
     /**
      * Find non-deleted templates by status and category.
      */
-    @Query("SELECT * FROM templates WHERE status = :status AND category = CAST(:category AS template_category) AND deleted_at IS NULL")
+    @Query("SELECT * FROM templates WHERE status = CAST(:status AS template_status) AND category = CAST(:category AS template_category) AND deleted_at IS NULL")
     Flux<TemplateEntity> findActiveByStatusAndCategory(String status, String category, Pageable pageable);
 
     /**
@@ -66,7 +66,7 @@ public interface TemplateR2dbcRepository extends ReactiveCrudRepository<Template
     /**
      * Count non-deleted templates by status.
      */
-    @Query("SELECT COUNT(*) FROM templates WHERE status = :status AND deleted_at IS NULL")
+    @Query("SELECT COUNT(*) FROM templates WHERE status = CAST(:status AS template_status) AND deleted_at IS NULL")
     Mono<Long> countActiveByStatus(String status);
 
     /**

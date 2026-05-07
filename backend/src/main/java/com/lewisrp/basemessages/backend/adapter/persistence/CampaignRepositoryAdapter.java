@@ -154,8 +154,33 @@ public class CampaignRepositoryAdapter implements CampaignRepositoryPort {
         }
         return Flux.fromIterable(recipients)
                 .map(recipientMapper::toEntity)
-                .flatMap(recipientRepository::save)
+                .flatMap(this::insertRecipient)
                 .then();
+    }
+
+    private Mono<Void> insertRecipient(CampaignRecipientEntity entity) {
+        String sql = """
+                INSERT INTO campaign_recipients (campaign_id, contact_id, status, sent_at, delivered_at,
+                                                  opened_at, clicked_at, failed_at, failure_reason, device_type, created_at)
+                VALUES (:campaignId, :contactId, CAST(:status AS message_status), :sentAt, :deliveredAt,
+                        :openedAt, :clickedAt, :failedAt, :failureReason, CAST(:deviceType AS device_type), :createdAt)
+                """;
+
+        org.springframework.r2dbc.core.DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql)
+                .bind("campaignId", entity.getCampaignId())
+                .bind("contactId", entity.getContactId())
+                .bind("status", entity.getStatus())
+                .bind("createdAt", entity.getCreatedAt() != null ? entity.getCreatedAt() : LocalDateTime.now());
+
+        spec = bindNullable(spec, "sentAt", entity.getSentAt(), LocalDateTime.class);
+        spec = bindNullable(spec, "deliveredAt", entity.getDeliveredAt(), LocalDateTime.class);
+        spec = bindNullable(spec, "openedAt", entity.getOpenedAt(), LocalDateTime.class);
+        spec = bindNullable(spec, "clickedAt", entity.getClickedAt(), LocalDateTime.class);
+        spec = bindNullable(spec, "failedAt", entity.getFailedAt(), LocalDateTime.class);
+        spec = bindNullable(spec, "failureReason", entity.getFailureReason(), String.class);
+        spec = bindNullable(spec, "deviceType", entity.getDeviceType(), String.class);
+
+        return spec.then();
     }
 
     @Override
@@ -170,7 +195,7 @@ public class CampaignRepositoryAdapter implements CampaignRepositoryPort {
             default -> null;
         };
 
-        StringBuilder sql = new StringBuilder("UPDATE campaign_recipients SET status = :status");
+        StringBuilder sql = new StringBuilder("UPDATE campaign_recipients SET status = CAST(:status AS message_status)");
         if (failureReason != null) {
             sql.append(", failure_reason = :failureReason");
         }
@@ -180,7 +205,7 @@ public class CampaignRepositoryAdapter implements CampaignRepositoryPort {
         sql.append(" WHERE id = :id");
 
         org.springframework.r2dbc.core.DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql.toString())
-                .bind("status", status.name())
+                .bind("status", status.name().toLowerCase())
                 .bind("id", recipientId);
 
         if (failureReason != null) {

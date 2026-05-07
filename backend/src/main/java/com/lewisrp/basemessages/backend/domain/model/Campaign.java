@@ -96,6 +96,9 @@ public class Campaign {
      * Transition campaign to SENDING status.
      */
     public void markSending() {
+        if (status == CampaignStatus.SENDING) {
+            return; // idempotent: already sending
+        }
         if (status != CampaignStatus.DRAFT && status != CampaignStatus.SCHEDULED) {
             throw new IllegalStateException("Only DRAFT or SCHEDULED campaigns can start sending");
         }

@@ -88,8 +88,8 @@ CREATE TABLE templates (
     category template_category NOT NULL,
     language VARCHAR(10) NOT NULL DEFAULT 'EN_US',
     status template_status DEFAULT 'DRAFT',
-    content TEXT NOT NULL,  -- Template content with {{variables}}
-    rejection_reason TEXT,  -- Only populated if status is REJECTED
+    content TEXT NOT NULL,
+    rejection_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, name)
