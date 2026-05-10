@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.openapitools.api.AuthApiDelegate;
 import org.openapitools.model.LoginRequest;
 import org.openapitools.model.LoginResponse;
+import org.openapitools.model.RefreshRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -42,5 +43,18 @@ public class AuthApiDelegateImpl implements AuthApiDelegate {
         // For logout, we would typically get the refresh token from the request
         // For now, we'll just return 204 as the API specification requires
         return Mono.just(ResponseEntity.noContent().build());
+    }
+
+    @Override
+    public Mono<ResponseEntity<LoginResponse>> authRefreshPost(Mono<RefreshRequest> refreshRequest, ServerWebExchange exchange) {
+        return refreshRequest
+                .map(req -> req.getRefreshToken())
+                .flatMap(authUseCase::refresh)
+                .map(authMapper::toLoginResponse)
+                .map(ResponseEntity::ok)
+                .onErrorResume(e -> {
+                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                    return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+                });
     }
 }

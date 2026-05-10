@@ -23,6 +23,7 @@ public interface AuthMapper {
      * Convert application LoginResult to OpenAPI LoginResponse.
      */
     @Mapping(target = "token", source = "accessToken")
+    @Mapping(target = "refreshToken", source = "refreshToken")
     @Mapping(target = "user", source = "user")
     LoginResponse toLoginResponse(LoginResult loginResult);
 

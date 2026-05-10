@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { listTemplates, deleteTemplate, resubmitTemplate, refreshTemplateStatus } from '@/api/templates';
 import type { Template, TemplateCategory, TemplateStatus } from '@/api/types';
 import { PageId } from '../components/Layout';
@@ -73,6 +75,11 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
   const [resubmittingId, setResubmittingId] = useState<number | null>(null);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; id: number | null }>({
+    open: false,
+    id: null,
+  });
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -85,25 +92,79 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
         limit: 50,
       });
       setTemplates(response.data);
+      return response.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load templates');
+      return [];
     } finally {
       setLoading(false);
     }
   }, [searchQuery, statusFilter, categoryFilter]);
 
   useEffect(() => {
-    fetchTemplates();
-  }, [fetchTemplates]);
+    let cancelled = false;
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this template?')) return;
+    const loadAndRefresh = async () => {
+      const data = await fetchTemplates();
+      if (cancelled) return;
+
+      // Auto-refresh pending templates from Meta
+      const pending = data.filter((t) => t.status === 'PENDING' && !t.metaError);
+      if (pending.length === 0) return;
+
+      setAutoRefreshing(true);
+      const toastId = toast.loading(
+        `Refreshing ${pending.length} pending template${pending.length > 1 ? 's' : ''} from Meta...`
+      );
+
+      const results = await Promise.allSettled(
+        pending.map((t) => refreshTemplateStatus(t.id))
+      );
+
+      if (cancelled) return;
+
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
+      // Re-fetch to get updated statuses
+      await fetchTemplates();
+
+      if (cancelled) return;
+
+      toast.dismiss(toastId);
+      if (failed === 0) {
+        toast.success('All pending template statuses refreshed from Meta');
+      } else if (succeeded === 0) {
+        toast.error('Failed to refresh template statuses from Meta');
+      } else {
+        toast.success(`Refreshed ${succeeded} templates, ${failed} failed`);
+      }
+      setAutoRefreshing(false);
+    };
+
+    loadAndRefresh();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDelete = async () => {
+    const id = deleteDialog.id;
+    if (!id) return;
+    setDeleteDialog({ open: false, id: null });
     try {
       await deleteTemplate(id);
+      toast.success('Template deleted successfully');
       await fetchTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete template');
+      const message = err instanceof Error ? err.message : 'Failed to delete template';
+      toast.error(message);
     }
+  };
+
+  const openDeleteDialog = (id: number) => {
+    setDeleteDialog({ open: true, id });
   };
 
   const handleResubmit = async (id: number) => {
@@ -111,6 +172,7 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
     setError(null);
     try {
       await resubmitTemplate(id);
+      toast.success('Template resubmitted for approval');
       await fetchTemplates();
     } catch (err) {
       let message = 'Failed to resubmit template';
@@ -144,6 +206,7 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
     setError(null);
     try {
       await refreshTemplateStatus(id);
+      toast.success('Template status refreshed');
       await fetchTemplates();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to refresh template status';
@@ -393,7 +456,7 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
                             Edit Template
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => handleDelete(template.id)} className="text-destructive">
+                        <DropdownMenuItem onClick={() => openDeleteDialog(template.id)} className="text-destructive">
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -419,6 +482,17 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}
+        title="Delete Template"
+        description="Are you sure you want to delete this template? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
 
       {/* Performance Ledger - Static for now, will be populated in Phase 3 */}
       <section className="mt-20">

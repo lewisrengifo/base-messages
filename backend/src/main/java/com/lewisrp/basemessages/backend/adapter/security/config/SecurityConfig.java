@@ -55,6 +55,7 @@ public class SecurityConfig {
                         // Public endpoints
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
                         // Swagger/OpenAPI endpoints
                         .pathMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         // Health check

@@ -51,6 +51,60 @@ public class AuthApplicationService implements AuthUseCase {
         });
     }
     
+    @Override
+    public Mono<LoginResult> refresh(String refreshToken) {
+        log.debug("Processing token refresh");
+        
+        if (refreshToken == null || refreshToken.isEmpty()) {
+            return Mono.error(new InvalidCredentialsException("Refresh token is required"));
+        }
+        
+        return Mono.fromCallable(() -> refreshTokenStore.validateAndGetUserId(refreshToken))
+                .flatMap(userId -> {
+                    if (userId == null) {
+                        log.warn("Invalid or expired refresh token");
+                        return Mono.error(new InvalidCredentialsException("Invalid or expired refresh token"));
+                    }
+                    
+                    // Revoke the old refresh token
+                    refreshTokenStore.revoke(refreshToken);
+                    
+                    return userRepository.findById(userId)
+                            .flatMap(user -> {
+                                if (!user.canLogin()) {
+                                    log.info("User account is disabled: {}", user.getEmail());
+                                    return Mono.error(new InvalidCredentialsException("Account is disabled"));
+                                }
+                                
+                                // Generate new tokens
+                                String newAccessToken = tokenProvider.generateAccessToken(user);
+                                String newRefreshToken = tokenProvider.generateRefreshToken(user);
+                                
+                                // Store new refresh token
+                                refreshTokenStore.store(newRefreshToken, user.getId(), 604800);
+                                
+                                log.info("Tokens refreshed for user: {}", user.getEmail());
+                                
+                                LoginResult.UserInfo userInfo = new LoginResult.UserInfo(
+                                        user.getId(),
+                                        user.getEmail(),
+                                        user.getName(),
+                                        user.getAvatarUrl()
+                                );
+                                
+                                LoginResult result = new LoginResult(
+                                        newAccessToken,
+                                        newRefreshToken,
+                                        "Bearer",
+                                        900L,
+                                        userInfo
+                                );
+                                
+                                return Mono.just(result);
+                            });
+                });
+    }
+    
     private Mono<LoginResult> authenticateUser(User user, String rawPassword) {
         if (!user.canLogin()) {
             log.info("User account is disabled: {}", user.getEmail());

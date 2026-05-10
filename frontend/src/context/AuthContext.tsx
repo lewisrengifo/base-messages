@@ -11,7 +11,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { User } from '@/api/types';
-import { login as loginApi, logout as logoutApi, AuthTokens } from '@/api/auth';
+import { login as loginApi, logout as logoutApi, refreshToken as refreshTokenApi, AuthTokens } from '@/api/auth';
 import { tokenStorage } from '@/services/storage';
 import { ApiClientError } from '@/api/client';
 
@@ -33,17 +33,39 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Check for existing auth on mount
+  // Restore session on mount using refresh token
   useEffect(() => {
-    // Check if we have tokens from a previous session
-    const hasTokens = tokenStorage.hasTokens();
-    if (hasTokens) {
-      // TODO: Implement token validation / user info fetch
-      // For now, we'll clear tokens to force re-login
+    const storedUser = tokenStorage.getUser();
+    const refreshToken = tokenStorage.getRefreshToken();
+
+    if (refreshToken) {
+      refreshTokenApi(refreshToken)
+        .then(({ user: userData, tokens }) => {
+          if (tokens.accessToken) {
+            tokenStorage.setAccessToken(tokens.accessToken);
+          }
+          if (tokens.refreshToken) {
+            tokenStorage.setRefreshToken(tokens.refreshToken);
+          }
+          tokenStorage.setUser(userData);
+          setUser(userData);
+        })
+        .catch(() => {
+          // Refresh failed, clear everything
+          tokenStorage.clearAll();
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else if (storedUser) {
+      // No refresh token but user info exists - clear stale data
       tokenStorage.clearAll();
+      setIsLoading(false);
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
@@ -61,6 +83,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (tokens.refreshToken) {
         tokenStorage.setRefreshToken(tokens.refreshToken);
       }
+
+      // Persist user info so session survives refresh
+      tokenStorage.setUser(userData);
 
       // Update state
       setUser(userData);

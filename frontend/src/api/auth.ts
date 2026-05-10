@@ -25,8 +25,24 @@ export async function login(credentials: LoginRequest): Promise<{ user: LoginRes
     user: response.user,
     tokens: {
       accessToken: response.token,
-      // Note: Backend sends only access token in LoginResponse
-      // Refresh token handling depends on backend implementation
+      refreshToken: response.refreshToken,
+    },
+  };
+}
+
+/**
+ * Refresh access token using refresh token
+ */
+export async function refreshToken(refreshToken: string): Promise<{ user: LoginResponse['user']; tokens: AuthTokens }> {
+  const response = await apiClient.post<LoginResponse>('/auth/refresh', { refreshToken }, {
+    skipAuth: true,
+  });
+
+  return {
+    user: response.user,
+    tokens: {
+      accessToken: response.token,
+      refreshToken: response.refreshToken,
     },
   };
 }

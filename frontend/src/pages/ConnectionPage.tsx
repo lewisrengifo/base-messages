@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Smartphone, BadgeCheck, Key, Rocket, AlertCircle, ExternalLink, Zap, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { getConnectionStatus, saveConnection, testConnection, deleteConnection } from '@/api/connection';
 import type { ConnectionStatus as ConnectionStatusType } from '@/api/types';
 
@@ -21,7 +23,7 @@ export default function ConnectionPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -51,7 +53,6 @@ export default function ConnectionPage() {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const response = await saveConnection({
@@ -60,7 +61,7 @@ export default function ConnectionPage() {
         accessToken: formData.accessToken,
       });
       setStatus(response);
-      setSuccess('Connection saved successfully!');
+      toast.success('Connection saved successfully');
       setFormData(prev => ({ ...prev, accessToken: '' }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save connection');
@@ -72,14 +73,13 @@ export default function ConnectionPage() {
   const handleTest = async () => {
     setTesting(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const response = await testConnection();
       if (response.success) {
-        setSuccess(`Connection test successful! Latency: ${response.latency}ms`);
+        toast.success(`Connection test successful! Latency: ${response.latency}ms`);
       } else {
-        setError(`Connection test failed: ${response.message}`);
+        toast.error(`Connection test failed: ${response.message}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to test connection');
@@ -89,21 +89,18 @@ export default function ConnectionPage() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to remove this connection? This will disconnect your WhatsApp Business API.')) {
-      return;
-    }
-
+    setDeleteDialogOpen(false);
     setSaving(true);
     setError(null);
-    setSuccess(null);
 
     try {
       await deleteConnection();
       setStatus(null);
       setFormData({ phoneNumberId: '', wabaId: '', accessToken: '' });
-      setSuccess('Connection removed successfully!');
+      toast.success('Connection removed successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove connection');
+      const message = err instanceof Error ? err.message : 'Failed to remove connection';
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -133,13 +130,6 @@ export default function ConnectionPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert className="bg-emerald-50 text-emerald-800 border-emerald-200">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
 
@@ -245,7 +235,7 @@ export default function ConnectionPage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={handleDelete}
+                  onClick={() => setDeleteDialogOpen(true)}
                   disabled={saving}
                   className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
@@ -366,6 +356,17 @@ export default function ConnectionPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Remove Connection"
+        description="Are you sure you want to remove this connection? This will disconnect your WhatsApp Business API."
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

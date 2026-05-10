@@ -5,9 +5,18 @@
  * Following backend JWT strategy:
  * - Access token: Short-lived (15 min), stored in memory
  * - Refresh token: Long-lived (7 days), stored in localStorage
+ * - User info: Stored in localStorage to survive page refreshes
  */
 
 const REFRESH_TOKEN_KEY = 'bm_refresh_token';
+const USER_KEY = 'bm_user';
+
+export interface StoredUser {
+  id: number;
+  email: string;
+  name: string;
+  avatar?: string;
+}
 
 class TokenStorage {
   private accessToken: string | null = null;
@@ -68,18 +77,54 @@ class TokenStorage {
   }
 
   /**
-   * Clear all tokens (logout)
-   */
-  clearAll(): void {
-    this.clearAccessToken();
-    this.clearRefreshToken();
-  }
-
-  /**
    * Check if user has tokens (might be authenticated)
    */
   hasTokens(): boolean {
     return this.accessToken !== null || this.getRefreshToken() !== null;
+  }
+
+  /**
+   * Store user info in localStorage
+   */
+  setUser(user: StoredUser): void {
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch (e) {
+      console.warn('localStorage not available');
+    }
+  }
+
+  /**
+   * Get user info from localStorage
+   */
+  getUser(): StoredUser | null {
+    try {
+      const data = localStorage.getItem(USER_KEY);
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      console.warn('localStorage not available');
+      return null;
+    }
+  }
+
+  /**
+   * Clear user info from localStorage
+   */
+  clearUser(): void {
+    try {
+      localStorage.removeItem(USER_KEY);
+    } catch (e) {
+      console.warn('localStorage not available');
+    }
+  }
+
+  /**
+   * Clear all auth data (logout)
+   */
+  clearAll(): void {
+    this.clearAccessToken();
+    this.clearRefreshToken();
+    this.clearUser();
   }
 }
 

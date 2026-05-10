@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   UserPlus,
   Search,
@@ -7,7 +8,6 @@ import {
   ChevronRight,
   Loader2,
   AlertCircle,
-  CheckCircle2,
   Users,
   Eye,
   Pencil,
@@ -58,7 +58,6 @@ export default function ContactsPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
@@ -110,14 +109,6 @@ export default function ContactsPage() {
     fetchContacts();
   }, [fetchContacts]);
 
-  // Auto-clear success messages
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
-
   const canGoPrev = pagination?.hasPrev ?? page > 1;
   const canGoNext = pagination?.hasNext ?? false;
 
@@ -155,11 +146,11 @@ export default function ContactsPage() {
     setCreating(true);
     try {
       await createContact({ name, phone, email: email || undefined });
-      setSuccess('Contact created successfully');
-      setCreateFormData({ name: '', phone: '', email: '' });
+      toast.success('Contact created successfully');
       setIsCreateOpen(false);
-      setPage(1);
-      await fetchContacts();
+      setCreateFormData({ name: '', phone: '', email: '' });
+      setCreateError(null);
+      fetchContacts();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create contact');
     } finally {
@@ -222,9 +213,12 @@ export default function ContactsPage() {
     setUpdating(true);
     try {
       await updateContact(editingContact.id, payload);
-      setSuccess('Contact updated successfully');
+      toast.success('Contact updated successfully');
       setIsEditOpen(false);
-      await fetchContacts();
+      setEditingContact(null);
+      setEditFormData({ name: '', phone: '', email: '' });
+      setEditError(null);
+      fetchContacts();
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to update contact');
     } finally {
@@ -245,9 +239,8 @@ export default function ContactsPage() {
     setDeleting(true);
     try {
       await deleteContact(deletingContact.id);
-      setSuccess('Contact deleted successfully');
-      setIsDeleteOpen(false);
-      await fetchContacts();
+      toast.success('Contact deleted successfully');
+      fetchContacts();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete contact');
     } finally {
@@ -335,13 +328,6 @@ export default function ContactsPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert className="bg-emerald-50 text-emerald-800 border-emerald-200">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
 

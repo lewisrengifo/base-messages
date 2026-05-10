@@ -8,10 +8,12 @@ import TemplateBuilderPage from './pages/TemplateBuilderPage';
 import CampaignBuilderPage from './pages/CampaignBuilderPage';
 import CampaignAnalyticsPage from './pages/CampaignAnalyticsPage';
 import LoginPage from './pages/LoginPage';
-import { AuthProvider } from '@/context/AuthContext';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import { Toaster } from 'sonner';
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ function AppContent() {
   const [activePage, setActivePage] = useState<PageId>('campaigns');
   const [lastSubmittedTemplateName, setLastSubmittedTemplateName] = useState<string>('');
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+
+  usePageTitle(activePage);
 
   const handleNavigate = (page: PageId) => {
     // Clear editing state when leaving template builder
@@ -83,6 +87,7 @@ function AppContent() {
           {renderPage()}
         </Layout>
       </LoginGate>
+      <Toaster richColors position="top-right" closeButton />
     </div>
   );
 }
@@ -92,10 +97,18 @@ function AppContent() {
  * otherwise shows children
  */
 function LoginGate({ children }: { children: React.ReactNode }) {
-  const [showLogin, setShowLogin] = React.useState(true);
+  const { isAuthenticated, isLoading } = useAuth();
 
-  if (showLogin) {
-    return <LoginPage onLogin={() => setShowLogin(false)} />;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={() => {}} />;
   }
 
   return <>{children}</>;

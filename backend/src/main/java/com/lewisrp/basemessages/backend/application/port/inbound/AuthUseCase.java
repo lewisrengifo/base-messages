@@ -26,4 +26,13 @@ public interface AuthUseCase {
      * @return Mono completing when logout is done
      */
     Mono<Void> logout(String refreshToken);
+
+    /**
+     * Refresh access token using a valid refresh token.
+     * Returns new access and refresh tokens, and revokes the old refresh token.
+     *
+     * @param refreshToken the refresh token to exchange
+     * @return Mono emitting new login result with tokens
+     */
+    Mono<LoginResult> refresh(String refreshToken);
 }
