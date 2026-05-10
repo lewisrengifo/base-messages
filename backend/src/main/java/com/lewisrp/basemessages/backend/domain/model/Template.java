@@ -27,6 +27,10 @@ public class Template {
     private List<TemplateVariable> variables;
     private String rejectionReason;
     private String metaError;
+    private HeaderType headerType;
+    private String headerHandle;
+    private String headerDocumentUrl;
+    private String headerDocumentKey;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
@@ -43,6 +47,13 @@ public class Template {
      */
     public enum TemplateStatus {
         DRAFT, PENDING, APPROVED, REJECTED
+    }
+
+    /**
+     * Header types for WhatsApp message templates.
+     */
+    public enum HeaderType {
+        TEXT, DOCUMENT
     }
 
     /**

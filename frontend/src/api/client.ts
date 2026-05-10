@@ -45,8 +45,9 @@ async function request<T>(
   const url = `${API_BASE_URL}${endpoint}`;
 
   // Default headers
+  const isFormData = fetchOptions.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     Accept: 'application/json',
     ...((fetchOptions.headers as Record<string, string>) || {}),
   };
@@ -147,7 +148,7 @@ export const apiClient = {
     request<T>(endpoint, {
       ...options,
       method: 'POST',
-      body: JSON.stringify(body),
+      body: body instanceof FormData ? body : JSON.stringify(body),
     }),
 
   /**

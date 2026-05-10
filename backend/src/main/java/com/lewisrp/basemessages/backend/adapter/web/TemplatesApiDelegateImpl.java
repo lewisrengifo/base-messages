@@ -5,16 +5,19 @@ import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
 import com.lewisrp.basemessages.backend.application.dto.UpdateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.service.TemplateApplicationService;
 import org.openapitools.api.TemplatesApiDelegate;
-import org.openapitools.model.CreateTemplateRequest;
 import org.openapitools.model.Template;
 import org.openapitools.model.TemplateDetail;
 import org.openapitools.model.TemplateListResponse;
 import org.openapitools.model.UpdateTemplateRequest;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.http.codec.multipart.Part;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.ZoneOffset;
@@ -63,12 +66,81 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
     }
 
     @Override
-    public Mono<ResponseEntity<Template>> templatesPost(Mono<CreateTemplateRequest> createTemplateRequest, ServerWebExchange exchange) {
-        return createTemplateRequest
-                .map(this::toCommand)
-                .flatMap(templateService::createTemplate)
-                .map(this::toApiModel)
-                .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template));
+    public Mono<ResponseEntity<Template>> templatesPost(
+            String name,
+            String category,
+            String content,
+            String language,
+            String headerType,
+            Flux<Part> headerDocument,
+            String variables,
+            ServerWebExchange exchange) {
+
+        // Extract file bytes from Flux<Part>
+        Mono<byte[]> fileBytesMono = headerDocument
+                .collectList()
+                .flatMap(parts -> {
+                    if (parts.isEmpty()) {
+                        return Mono.just((byte[]) null);
+                    }
+                    Part part = parts.get(0);
+                    if (part instanceof FilePart filePart) {
+                        return DataBufferUtils.join(filePart.content())
+                                .map(dataBuffer -> {
+                                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                    dataBuffer.read(bytes);
+                                    DataBufferUtils.release(dataBuffer);
+                                    return bytes;
+                                });
+                    }
+                    return Mono.just((byte[]) null);
+                })
+                .switchIfEmpty(Mono.just((byte[]) null));
+
+        // Extract file name
+        Mono<String> fileNameMono = headerDocument
+                .collectList()
+                .map(parts -> {
+                    if (parts.isEmpty()) return null;
+                    Part part = parts.get(0);
+                    if (part instanceof FilePart filePart) {
+                        return filePart.filename();
+                    }
+                    return null;
+                })
+                .switchIfEmpty(Mono.just((String) null));
+
+        return Mono.zip(fileBytesMono, fileNameMono)
+                .flatMap(tuple -> {
+                    byte[] fileBytes = tuple.getT1();
+                    String fileName = tuple.getT2();
+
+                    List<CreateTemplateCommand.TemplateVariableDto> variableList = null;
+                    if (variables != null && !variables.isBlank()) {
+                        try {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            variableList = mapper.readValue(variables,
+                                    mapper.getTypeFactory().constructCollectionType(List.class, CreateTemplateCommand.TemplateVariableDto.class));
+                        } catch (Exception e) {
+                            // ignore parsing errors
+                        }
+                    }
+
+                    CreateTemplateCommand command = new CreateTemplateCommand(
+                            name,
+                            category,
+                            content,
+                            language,
+                            headerType,
+                            fileBytes,
+                            fileName,
+                            variableList
+                    );
+
+                    return templateService.createTemplate(command)
+                            .map(this::toApiModel)
+                            .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template));
+                });
     }
 
     @Override
@@ -93,6 +165,17 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                     }
                     
                     detail.setContent(dto.getContent());
+                    
+                    if (dto.getHeaderType() != null) {
+                        detail.setHeaderType(TemplateDetail.HeaderTypeEnum.valueOf(dto.getHeaderType()));
+                    }
+                    if (dto.getHeaderDocumentUrl() != null) {
+                        try {
+                            detail.setHeaderDocumentUrl(java.net.URI.create(dto.getHeaderDocumentUrl()));
+                        } catch (Exception e) {
+                            // ignore invalid URI
+                        }
+                    }
                     
                     // Convert variables
                     if (dto.getVariables() != null) {
@@ -151,23 +234,6 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
                 .map(ResponseEntity::ok);
     }
 
-    private CreateTemplateCommand toCommand(CreateTemplateRequest request) {
-        List<CreateTemplateCommand.TemplateVariableDto> variables = null;
-        if (request.getVariables() != null) {
-            variables = request.getVariables().stream()
-                    .map(v -> new CreateTemplateCommand.TemplateVariableDto(v.getExample()))
-                    .collect(Collectors.toList());
-        }
-        
-        return new CreateTemplateCommand(
-                request.getName(),
-                request.getCategory() != null ? request.getCategory().name() : null,
-                request.getContent(),
-                request.getLanguage(),
-                variables
-        );
-    }
-
     private UpdateTemplateCommand toUpdateCommand(UpdateTemplateRequest request) {
         List<UpdateTemplateCommand.TemplateVariableDto> variables = null;
         if (request.getVariables() != null) {
@@ -207,6 +273,17 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
         }
         
         template.setContent(dto.getContent());
+        
+        if (dto.getHeaderType() != null) {
+            template.setHeaderType(Template.HeaderTypeEnum.valueOf(dto.getHeaderType()));
+        }
+        if (dto.getHeaderDocumentUrl() != null) {
+            try {
+                template.setHeaderDocumentUrl(java.net.URI.create(dto.getHeaderDocumentUrl()));
+            } catch (Exception e) {
+                // ignore invalid URI
+            }
+        }
         
         if (dto.getVariables() != null) {
             template.setVariables(dto.getVariables().stream()

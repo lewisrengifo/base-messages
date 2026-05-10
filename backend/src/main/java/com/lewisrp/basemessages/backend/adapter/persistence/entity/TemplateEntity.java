@@ -38,6 +38,14 @@ public class TemplateEntity {
 
     private String metaError;
 
+    private String headerType;
+
+    private String headerHandle;
+
+    private String headerDocumentUrl;
+
+    private String headerDocumentKey;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

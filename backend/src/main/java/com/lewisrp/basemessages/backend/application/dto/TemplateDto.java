@@ -13,6 +13,8 @@ public class TemplateDto {
     private final String language;
     private final String status;
     private final String content;
+    private final String headerType;
+    private final String headerDocumentUrl;
     private final List<TemplateVariableDto> variables;
     private final String rejectionReason;
     private final String metaError;
@@ -21,7 +23,8 @@ public class TemplateDto {
     private final LocalDateTime deletedAt;
 
     public TemplateDto(Long id, String name, String category, String language,
-                       String status, String content, List<TemplateVariableDto> variables,
+                       String status, String content, String headerType, String headerDocumentUrl,
+                       List<TemplateVariableDto> variables,
                        String rejectionReason, String metaError, LocalDateTime createdAt, LocalDateTime updatedAt, LocalDateTime deletedAt) {
         this.id = id;
         this.name = name;
@@ -29,6 +32,8 @@ public class TemplateDto {
         this.language = language;
         this.status = status;
         this.content = content;
+        this.headerType = headerType;
+        this.headerDocumentUrl = headerDocumentUrl;
         this.variables = variables;
         this.rejectionReason = rejectionReason;
         this.metaError = metaError;
@@ -59,6 +64,14 @@ public class TemplateDto {
 
     public String getContent() {
         return content;
+    }
+
+    public String getHeaderType() {
+        return headerType;
+    }
+
+    public String getHeaderDocumentUrl() {
+        return headerDocumentUrl;
     }
 
     public List<TemplateVariableDto> getVariables() {

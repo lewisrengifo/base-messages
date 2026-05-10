@@ -10,14 +10,21 @@ public class CreateTemplateCommand {
     private final String category;
     private final String content;
     private final String language;
+    private final String headerType;
+    private final byte[] headerDocument;
+    private final String headerDocumentName;
     private final List<TemplateVariableDto> variables;
 
     public CreateTemplateCommand(String name, String category, String content, 
-                                 String language, List<TemplateVariableDto> variables) {
+                                 String language, String headerType, byte[] headerDocument,
+                                 String headerDocumentName, List<TemplateVariableDto> variables) {
         this.name = name;
         this.category = category;
         this.content = content;
         this.language = language;
+        this.headerType = headerType;
+        this.headerDocument = headerDocument;
+        this.headerDocumentName = headerDocumentName;
         this.variables = variables;
     }
 
@@ -35,6 +42,18 @@ public class CreateTemplateCommand {
 
     public String getLanguage() {
         return language;
+    }
+
+    public String getHeaderType() {
+        return headerType;
+    }
+
+    public byte[] getHeaderDocument() {
+        return headerDocument;
+    }
+
+    public String getHeaderDocumentName() {
+        return headerDocumentName;
     }
 
     public List<TemplateVariableDto> getVariables() {

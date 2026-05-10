@@ -4,6 +4,7 @@ import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient;
 import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient.SubmissionResult;
 import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient.TemplateStatusResult;
 import com.lewisrp.basemessages.backend.adapter.security.EncryptionService;
+import com.lewisrp.basemessages.backend.adapter.storage.StorageService;
 import com.lewisrp.basemessages.backend.application.dto.CreateTemplateCommand;
 import com.lewisrp.basemessages.backend.application.dto.TemplateDto;
 import com.lewisrp.basemessages.backend.application.dto.UpdateTemplateCommand;
@@ -35,6 +36,7 @@ public class TemplateApplicationService {
     private final ConnectionRepositoryPort connectionRepository;
     private final MetaApiClient metaApiClient;
     private final EncryptionService encryptionService;
+    private final StorageService storageService;
 
     public Mono<TemplateDto> createTemplate(CreateTemplateCommand command) {
         log.info("Creating template: {}", command.getName());
@@ -55,12 +57,15 @@ public class TemplateApplicationService {
                             ? parseLanguage(command.getLanguage())
                             : Template.TemplateLanguage.EN_US;
 
+                    Template.HeaderType headerType = parseHeaderType(command.getHeaderType());
+
                     Template template = Template.builder()
                             .name(command.getName())
                             .category(Template.TemplateCategory.valueOf(command.getCategory().toUpperCase()))
                             .language(language)
                             .status(Template.TemplateStatus.PENDING)
                             .content(command.getContent())
+                            .headerType(headerType)
                             .build();
 
                     if (command.getVariables() != null && !command.getVariables().isEmpty()) {
@@ -73,8 +78,26 @@ public class TemplateApplicationService {
                         template.setVariables(variables);
                     }
 
-                    return templateRepository.save(template)
-                            .flatMap(this::submitToMeta);
+                    // Upload document to S3 if provided
+                    Mono<Template> uploadMono = Mono.just(template);
+                    if (headerType == Template.HeaderType.DOCUMENT && command.getHeaderDocument() != null) {
+                        uploadMono = Mono.fromCallable(() -> {
+                            String key = storageService.uploadFile(
+                                    "templates",
+                                    command.getHeaderDocumentName(),
+                                    command.getHeaderDocument(),
+                                    "application/pdf"
+                            );
+                            template.setHeaderDocumentKey(key);
+                            String presignedUrl = storageService.generatePresignedUrl(key);
+                            template.setHeaderDocumentUrl(presignedUrl);
+                            return template;
+                        });
+                    }
+
+                    return uploadMono
+                            .flatMap(templateRepository::save)
+                            .flatMap(savedTemplate -> submitToMeta(savedTemplate, command.getHeaderDocument()));
                 });
     }
 
@@ -208,10 +231,14 @@ public class TemplateApplicationService {
     }
 
     private Mono<TemplateDto> submitToMeta(Template template) {
+        return submitToMeta(template, null);
+    }
+
+    private Mono<TemplateDto> submitToMeta(Template template, byte[] documentBytes) {
         return connectionRepository.findCurrent()
                 .flatMap(connection -> {
                     String accessToken = encryptionService.decrypt(connection.getAccessToken());
-                    List<HashMap<String, String>> metaVariables = null;
+                    final List<HashMap<String, String>> metaVariables;
                     if (template.getVariables() != null && !template.getVariables().isEmpty()) {
                         metaVariables = template.getVariables().stream()
                                 .map(v -> {
@@ -220,21 +247,70 @@ public class TemplateApplicationService {
                                     return map;
                                 })
                                 .collect(Collectors.toList());
+                    } else {
+                        metaVariables = null;
                     }
 
-                    return metaApiClient.submitTemplate(
-                                    connection.getWabaId(),
-                                    accessToken,
-                                    template.getName(),
-                                    template.getCategory().name(),
-                                    languageToCode(template.getLanguage()),
-                                    template.getContent(),
-                                    metaVariables != null ? new ArrayList<>(metaVariables) : null
-                            )
-                            .flatMap(result -> handleSubmissionResult(result, template));
+                    final Template currentTemplate = template;
+
+                    // If document header, upload to Meta first
+                    Mono<String> headerHandleMono = Mono.just((String) null);
+                    if (currentTemplate.getHeaderType() == Template.HeaderType.DOCUMENT
+                            && currentTemplate.getHeaderDocumentKey() != null) {
+                        headerHandleMono = Mono.fromCallable(() -> {
+                                    byte[] bytes = documentBytes;
+                                    if (bytes == null) {
+                                        bytes = storageService.downloadFile(currentTemplate.getHeaderDocumentKey());
+                                    }
+                                    String fileName = currentTemplate.getHeaderDocumentKey();
+                                    int lastSlash = fileName.lastIndexOf('/');
+                                    if (lastSlash >= 0) {
+                                        fileName = fileName.substring(lastSlash + 1);
+                                    }
+                                    return metaApiClient.uploadMedia(
+                                            connection.getWabaId(),
+                                            accessToken,
+                                            bytes,
+                                            fileName,
+                                            "application/pdf"
+                                    ).block();
+                                })
+                                .onErrorResume(error -> {
+                                    log.error("Failed to upload document to Meta for template {}: {}",
+                                            currentTemplate.getName(), error.getMessage());
+                                    return Mono.just((String) null);
+                                });
+                    }
+
+                    return headerHandleMono
+                            .flatMap(headerHandle -> {
+                                currentTemplate.setHeaderHandle(headerHandle);
+                                return metaApiClient.submitTemplate(
+                                        connection.getWabaId(),
+                                        accessToken,
+                                        currentTemplate.getName(),
+                                        currentTemplate.getCategory().name(),
+                                        languageToCode(currentTemplate.getLanguage()),
+                                        currentTemplate.getContent(),
+                                        metaVariables != null ? new ArrayList<>(metaVariables) : null,
+                                        currentTemplate.getHeaderType() != null ? currentTemplate.getHeaderType().name() : null,
+                                        headerHandle
+                                );
+                            })
+                            .flatMap(result -> handleSubmissionResult(result, currentTemplate))
+                            .onErrorResume(error -> {
+                                log.error("Meta submission failed for template {}: {}", currentTemplate.getName(), error.getMessage());
+                                if (currentTemplate.getStatus() != Template.TemplateStatus.PENDING) {
+                                    currentTemplate.submitForApproval();
+                                }
+                                currentTemplate.setMetaError(error.getMessage());
+                                return templateRepository.save(currentTemplate)
+                                        .flatMap(saved -> Mono.error(new MetaSubmissionException(
+                                                "Template submission to Meta failed", error.getMessage())));
+                            });
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    log.warn("No connection found — saving template locally as PENDING without Meta submission");
+                    log.warn("No connection found - saving template locally as PENDING without Meta submission");
                     if (template.getStatus() != Template.TemplateStatus.PENDING) {
                         template.submitForApproval();
                     }
@@ -244,7 +320,7 @@ public class TemplateApplicationService {
 
     private Mono<TemplateDto> handleSubmissionResult(SubmissionResult result, Template template) {
         if (result.success()) {
-            log.info("Template submitted to Meta successfully — metaId: {}", result.metaTemplateId());
+            log.info("Template submitted to Meta successfully - metaId: {}", result.metaTemplateId());
             if (template.getStatus() != Template.TemplateStatus.PENDING) {
                 template.submitForApproval();
             }
@@ -254,7 +330,7 @@ public class TemplateApplicationService {
             }
             return templateRepository.save(template).map(this::toDto);
         } else {
-            log.error("Meta submission failed: {} — saving template as PENDING for retry", result.errorMessage());
+            log.error("Meta submission failed: {} - saving template as PENDING for retry", result.errorMessage());
             if (template.getStatus() != Template.TemplateStatus.PENDING) {
                 template.submitForApproval();
             }
@@ -293,7 +369,17 @@ public class TemplateApplicationService {
         log.info("Deleting template: {}", id);
         return templateRepository.findById(id)
                 .switchIfEmpty(Mono.error(new NotFoundException("Template not found with id: " + id)))
-                .flatMap(template -> templateRepository.deleteById(id));
+                .flatMap(template -> {
+                    // Delete document from S3 if exists
+                    if (template.getHeaderDocumentKey() != null) {
+                        try {
+                            storageService.deleteFile(template.getHeaderDocumentKey());
+                        } catch (Exception e) {
+                            log.warn("Failed to delete S3 file for template {}: {}", id, e.getMessage());
+                        }
+                    }
+                    return templateRepository.deleteById(id);
+                });
     }
 
     private TemplateDto toDto(Template template) {
@@ -304,6 +390,16 @@ public class TemplateApplicationService {
                     .collect(Collectors.toList());
         }
 
+        // Generate fresh presigned URL if document exists
+        String headerDocumentUrl = template.getHeaderDocumentUrl();
+        if (template.getHeaderType() == Template.HeaderType.DOCUMENT && template.getHeaderDocumentKey() != null) {
+            try {
+                headerDocumentUrl = storageService.generatePresignedUrl(template.getHeaderDocumentKey());
+            } catch (Exception e) {
+                log.warn("Failed to generate presigned URL for template {}: {}", template.getId(), e.getMessage());
+            }
+        }
+
         return new TemplateDto(
                 template.getId(),
                 template.getName(),
@@ -311,6 +407,8 @@ public class TemplateApplicationService {
                 template.getLanguage() != null ? template.getLanguage().name() : null,
                 template.getStatus() != null ? template.getStatus().name() : null,
                 template.getContent(),
+                template.getHeaderType() != null ? template.getHeaderType().name() : null,
+                headerDocumentUrl,
                 variables,
                 template.getRejectionReason(),
                 template.getMetaError(),
@@ -329,11 +427,22 @@ public class TemplateApplicationService {
         }
     }
 
+    private Template.HeaderType parseHeaderType(String headerType) {
+        if (headerType == null || headerType.isBlank()) {
+            return Template.HeaderType.TEXT;
+        }
+        try {
+            return Template.HeaderType.valueOf(headerType.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unknown header type '{}', defaulting to TEXT", headerType);
+            return Template.HeaderType.TEXT;
+        }
+    }
+
     private String languageToCode(Template.TemplateLanguage language) {
         String name = language.name();
         int idx = name.indexOf('_');
         if (idx > 0) {
-            // e.g. EN_US -> en_US, PT_BR -> pt_BR
             return name.substring(0, idx).toLowerCase() + name.substring(idx);
         }
         return name.toLowerCase();

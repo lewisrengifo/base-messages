@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2, XCircle } from 'lucide-react';
+import { Search, ShoppingBag, Tag, Lock, MessageSquare, Eye, Zap, MoreVertical, Edit3, Settings2, RefreshCw, Plus, BarChart3, AlertCircle, Loader2, XCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -346,6 +346,12 @@ export default function TemplatesPage({ onNavigate, onEditTemplate }: TemplatesP
                       <div>
                         <CardTitle className="font-bold text-foreground group-hover:text-primary transition-colors text-base">{template.name}</CardTitle>
                         <p className="technical-label">{template.category} • {template.language}</p>
+                        {template.headerType === 'DOCUMENT' && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <FileText size={12} className="text-primary" />
+                            <span className="text-[10px] font-bold text-primary">With PDF</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Badge

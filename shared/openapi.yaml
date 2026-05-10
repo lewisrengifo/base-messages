@@ -377,9 +377,37 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/CreateTemplateRequest'
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: '^[a-z0-9_]+$'
+                  description: Lowercase with underscores
+                  example: welcome_series_q4
+                category:
+                  type: string
+                  enum: [Marketing, Utility, Authentication]
+                content:
+                  type: string
+                  maxLength: 1024
+                  example: 'Hello {{1}}! Thank you for choosing us. Your order {{2}} has been confirmed.'
+                language:
+                  type: string
+                  example: EN_US
+                headerType:
+                  type: string
+                  enum: [TEXT, DOCUMENT]
+                  default: TEXT
+                  description: Type of template header
+                headerDocument:
+                  type: string
+                  format: binary
+                  description: PDF document for header (required when headerType is DOCUMENT)
+                variables:
+                  type: string
+                  description: JSON array of variables
       responses:
         '201':
           description: Template created and submitted for approval
@@ -1101,6 +1129,15 @@ components:
         content:
           type: string
           example: 'Hello {{1}}, thank you for your order #{{2}}. We are preparing it for shipment!'
+        headerType:
+          type: string
+          enum: [TEXT, DOCUMENT]
+          example: TEXT
+        headerDocumentUrl:
+          type: string
+          format: uri
+          description: Presigned URL to the header document (when headerType is DOCUMENT)
+          nullable: true
         variables:
           type: array
           items:
@@ -1169,6 +1206,15 @@ components:
         language:
           type: string
           example: EN_US
+        headerType:
+          type: string
+          enum: [TEXT, DOCUMENT]
+          default: TEXT
+          description: Type of template header
+        headerDocument:
+          type: string
+          format: binary
+          description: PDF document for header (required when headerType is DOCUMENT)
         variables:
           type: array
           items:

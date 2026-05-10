@@ -46,7 +46,29 @@ export async function getTemplate(id: number): Promise<TemplateDetail> {
  * Automatically submits to Meta for approval
  */
 export async function createTemplate(data: CreateTemplateRequest): Promise<Template> {
-  return apiClient.post<Template>(TEMPLATES_ENDPOINT, data);
+  const formData = new FormData();
+  formData.append('name', data.name);
+  formData.append('category', data.category);
+  formData.append('content', data.content);
+  formData.append('language', data.language);
+  
+  if (data.headerType) {
+    formData.append('headerType', data.headerType);
+  }
+  
+  if (data.headerDocument) {
+    formData.append('headerDocument', data.headerDocument);
+  }
+  
+  if (data.variables && data.variables.length > 0) {
+    formData.append('variables', JSON.stringify(data.variables));
+  }
+
+  return apiClient.post<Template>(TEMPLATES_ENDPOINT, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
 }
 
 /**

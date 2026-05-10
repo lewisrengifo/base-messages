@@ -2,6 +2,7 @@ package com.lewisrp.basemessages.backend.application.service;
 
 import com.lewisrp.basemessages.backend.adapter.external.MetaApiClient;
 import com.lewisrp.basemessages.backend.adapter.security.EncryptionService;
+import com.lewisrp.basemessages.backend.adapter.storage.StorageService;
 import com.lewisrp.basemessages.backend.application.port.outbound.CampaignRepositoryPort;
 import com.lewisrp.basemessages.backend.application.port.outbound.ConnectionRepositoryPort;
 import com.lewisrp.basemessages.backend.application.port.outbound.ContactRepositoryPort;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple3;
 
 import java.util.List;
 
@@ -32,6 +34,7 @@ public class BroadcastService {
     private final ConnectionRepositoryPort connectionRepository;
     private final MetaApiClient metaApiClient;
     private final EncryptionService encryptionService;
+    private final StorageService storageService;
 
     /**
      * Execute a campaign by sending messages to all pending recipients.
@@ -51,37 +54,51 @@ public class BroadcastService {
                     if (campaign.getStatus() != Campaign.CampaignStatus.SENDING) {
                         campaign.markSending();
                         return campaignRepository.save(campaign)
-                                .then(Mono.zip(
-                                        templateRepository.findById(campaign.getTemplateId()),
+                                .flatMap(savedCampaign -> Mono.zip(
+                                        Mono.just(savedCampaign),
+                                        templateRepository.findById(savedCampaign.getTemplateId()),
                                         connectionRepository.findCurrent()
                                 ));
                     }
 
                     return Mono.zip(
+                            Mono.just(campaign),
                             templateRepository.findById(campaign.getTemplateId()),
                             connectionRepository.findCurrent()
-                    )
-                            .flatMap(tuple -> {
-                                Template template = tuple.getT1();
-                                Connection connection = tuple.getT2();
+                    );
+                })
+                .flatMap(tuple -> {
+                    Campaign campaign = tuple.getT1();
+                    Template template = tuple.getT2();
+                    Connection connection = tuple.getT3();
 
-                                if (connection == null) {
-                                    return Mono.error(new IllegalStateException(
-                                            "No WhatsApp connection configured"));
-                                }
-                                if (!connection.isActive()) {
-                                    return Mono.error(new IllegalStateException(
-                                            "WhatsApp connection is not active"));
-                                }
+                    if (connection == null) {
+                        return Mono.error(new IllegalStateException(
+                                "No WhatsApp connection configured"));
+                    }
+                    if (!connection.isActive()) {
+                        return Mono.error(new IllegalStateException(
+                                "WhatsApp connection is not active"));
+                    }
 
-                                String accessToken = encryptionService.decrypt(connection.getAccessToken());
-                                List<String> variableValues = extractVariableValues(template);
-                                String languageCode = template.getLanguage() != null
-                                        ? template.getLanguage().name()
-                                        : "en_US";
+                    String accessToken = encryptionService.decrypt(connection.getAccessToken());
+                    List<String> variableValues = extractVariableValues(template);
+                    String languageCode = template.getLanguage() != null
+                            ? template.getLanguage().name()
+                            : "en_US";
 
-                                return sendToAllRecipients(campaign, template, connection, accessToken, languageCode, variableValues);
-                            });
+                    // Generate fresh presigned URL for document header
+                    String headerDocumentUrl = null;
+                    if (template.getHeaderType() == Template.HeaderType.DOCUMENT
+                            && template.getHeaderDocumentKey() != null) {
+                        try {
+                            headerDocumentUrl = storageService.generatePresignedUrl(template.getHeaderDocumentKey());
+                        } catch (Exception e) {
+                            log.error("Failed to generate presigned URL for campaign {}: {}", campaignId, e.getMessage());
+                        }
+                    }
+
+                    return sendToAllRecipients(campaign, template, connection, accessToken, languageCode, variableValues, headerDocumentUrl);
                 })
                 .then(campaignRepository.findById(campaignId))
                 .flatMap(campaign -> {
@@ -101,7 +118,8 @@ public class BroadcastService {
 
     private Mono<Void> sendToAllRecipients(Campaign campaign, Template template,
                                            Connection connection, String accessToken,
-                                           String languageCode, List<String> variableValues) {
+                                           String languageCode, List<String> variableValues,
+                                           String headerDocumentUrl) {
         return campaignRepository.findRecipientsByCampaignIdAndStatus(campaign.getId(), CampaignRecipient.MessageStatus.PENDING)
                 .flatMap(recipient ->
                                 contactRepository.findById(recipient.getContactId())
@@ -113,7 +131,8 @@ public class BroadcastService {
                                                             contact.getPhone(),
                                                             template.getName(),
                                                             languageCode,
-                                                            variableValues
+                                                            variableValues,
+                                                            headerDocumentUrl
                                                     )
                                                     .flatMap(result -> {
                                                         if (result.success()) {

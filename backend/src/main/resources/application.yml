@@ -21,6 +21,17 @@ meta:
   api:
     base-url: ${META_API_BASE_URL:https://graph.facebook.com/v25.0}
 
+# Storage Configuration
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    region: ${S3_REGION:us-east-1}
+    bucket: ${S3_BUCKET:base-messages}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    path-style-access: true
+    presigned-url-expiry: 1h
+
 # Logging
 logging:
   level:

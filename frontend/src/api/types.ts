@@ -71,6 +71,7 @@ export interface ApiResponse<T> {
 
 export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export type TemplateCategory = 'Marketing' | 'Utility' | 'Authentication';
+export type TemplateHeaderType = 'TEXT' | 'DOCUMENT';
 
 export interface TemplateVariable {
   position: number;
@@ -84,6 +85,8 @@ export interface Template {
   language: string;
   status: TemplateStatus;
   content: string;
+  headerType?: TemplateHeaderType;
+  headerDocumentUrl?: string;
   variables?: TemplateVariable[];
   metaError?: string;
   createdAt: string;
@@ -105,6 +108,8 @@ export interface CreateTemplateRequest {
   category: TemplateCategory;
   content: string;
   language: string;
+  headerType?: TemplateHeaderType;
+  headerDocument?: File | null;
   variables?: CreateTemplateVariable[];
 }
 

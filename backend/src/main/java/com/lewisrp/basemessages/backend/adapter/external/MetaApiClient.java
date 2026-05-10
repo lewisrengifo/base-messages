@@ -2,9 +2,15 @@ package com.lewisrp.basemessages.backend.adapter.external;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
@@ -18,12 +24,64 @@ import java.util.Map;
 public class MetaApiClient {
 
     private final WebClient webClient;
+    private final String baseUrl;
 
     public MetaApiClient(@Value("${meta.api.base-url:https://graph.facebook.com/v25.0}") String baseUrl) {
+        this.baseUrl = baseUrl;
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    /**
+     * Upload media to Meta using the Resumable Upload API to get a header handle.
+     */
+    public Mono<String> uploadMedia(String appId, String accessToken, byte[] fileBytes, String fileName, String mimeType) {
+        // Step 1: Create upload session
+        String sessionUrl = String.format("/%s/uploads", appId);
+        Map<String, Object> sessionBody = new HashMap<>();
+        sessionBody.put("file_length", fileBytes.length);
+        sessionBody.put("file_type", mimeType);
+        sessionBody.put("file_name", fileName);
+
+        return webClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path(sessionUrl)
+                        .queryParam("access_token", accessToken)
+                        .build())
+                .bodyValue(sessionBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .flatMap(sessionResponse -> {
+                    Object uploadId = sessionResponse.get("id");
+                    if (uploadId == null) {
+                        return Mono.error(new RuntimeException("No upload session ID returned from Meta"));
+                    }
+                    String uploadUrl = String.format("%s/%s", baseUrl, uploadId);
+
+                    // Step 2: Upload file data
+                    return webClient.post()
+                            .uri(uploadUrl)
+                            .header(HttpHeaders.AUTHORIZATION, "OAuth " + accessToken)
+                            .header("file_offset", "0")
+                            .header(HttpHeaders.CONTENT_TYPE, mimeType)
+                            .bodyValue(fileBytes)
+                            .retrieve()
+                            .bodyToMono(Map.class)
+                            .map(uploadResponse -> {
+                                Object handle = uploadResponse.get("h");
+                                if (handle == null) {
+                                    throw new RuntimeException("No handle returned from Meta upload");
+                                }
+                                log.info("Media uploaded to Meta successfully, handle: {}", handle);
+                                return handle.toString();
+                            });
+                })
+                .onErrorResume(error -> {
+                    log.error("Media upload to Meta failed: {}", error.getMessage(), error);
+                    return Mono.error(new RuntimeException("Failed to upload media to Meta: " + error.getMessage()));
+                });
     }
 
     public Mono<SubmissionResult> submitTemplate(
@@ -33,7 +91,9 @@ public class MetaApiClient {
             String category,
             String language,
             String content,
-            List<Map<String, String>> variables) {
+            List<Map<String, String>> variables,
+            String headerType,
+            String headerHandle) {
 
         String url = String.format("/%s/message_templates", wabaId);
 
@@ -44,6 +104,17 @@ public class MetaApiClient {
 
         List<Map<String, Object>> components = new ArrayList<>();
 
+        // HEADER component (optional)
+        if ("DOCUMENT".equalsIgnoreCase(headerType) && headerHandle != null) {
+            Map<String, Object> headerComponent = new HashMap<>();
+            headerComponent.put("type", "HEADER");
+            headerComponent.put("format", "DOCUMENT");
+            Map<String, Object> example = new HashMap<>();
+            example.put("header_handle", List.of(headerHandle));
+            headerComponent.put("example", example);
+            components.add(headerComponent);
+        }
+
         // BODY component (required)
         Map<String, Object> bodyComponent = new HashMap<>();
         bodyComponent.put("type", "BODY");
@@ -53,7 +124,6 @@ public class MetaApiClient {
             List<String> exampleValues = variables.stream()
                     .map(v -> v.getOrDefault("example", v.getOrDefault("text", "")))
                     .toList();
-            // Meta expects: example: { body_text: [ ["val1", "val2"] ] }
             Map<String, Object> example = new HashMap<>();
             example.put("body_text", List.of(exampleValues));
             bodyComponent.put("example", example);
@@ -111,18 +181,14 @@ public class MetaApiClient {
                 });
     }
 
-    public record TemplateStatusResult(
-            String status,
-            String rejectionReason
-    ) {}
-
     public Mono<SendResult> sendTemplateMessage(
             String phoneNumberId,
             String accessToken,
             String toPhone,
             String templateName,
             String languageCode,
-            List<String> variableValues) {
+            List<String> variableValues,
+            String headerDocumentUrl) {
 
         String url = String.format("/%s/messages", phoneNumberId);
 
@@ -138,6 +204,23 @@ public class MetaApiClient {
         language.put("code", languageCode);
         template.put("language", language);
 
+        List<Map<String, Object>> components = new ArrayList<>();
+
+        // Header component with document
+        if (headerDocumentUrl != null && !headerDocumentUrl.isBlank()) {
+            Map<String, Object> headerParam = new HashMap<>();
+            headerParam.put("type", "document");
+            Map<String, String> document = new HashMap<>();
+            document.put("link", headerDocumentUrl);
+            headerParam.put("document", document);
+
+            Map<String, Object> headerComponent = new HashMap<>();
+            headerComponent.put("type", "header");
+            headerComponent.put("parameters", List.of(headerParam));
+            components.add(headerComponent);
+        }
+
+        // Body component with variables
         if (variableValues != null && !variableValues.isEmpty()) {
             List<Map<String, Object>> parameters = new ArrayList<>();
             for (String value : variableValues) {
@@ -149,7 +232,11 @@ public class MetaApiClient {
             Map<String, Object> component = new HashMap<>();
             component.put("type", "body");
             component.put("parameters", parameters);
-            template.put("components", List.of(component));
+            components.add(component);
+        }
+
+        if (!components.isEmpty()) {
+            template.put("components", components);
         }
 
         body.put("template", template);
@@ -185,20 +272,6 @@ public class MetaApiClient {
                 });
     }
 
-    public record SendResult(
-            boolean success,
-            String metaMessageId,
-            String errorMessage
-    ) {
-        public static SendResult success(String metaMessageId) {
-            return new SendResult(true, metaMessageId, null);
-        }
-
-        public static SendResult failure(String errorMessage) {
-            return new SendResult(false, null, errorMessage);
-        }
-    }
-
     public Mono<Boolean> testConnection(String wabaId, String phoneNumberId, String accessToken) {
         String targetId = (wabaId != null && !wabaId.isBlank()) ? wabaId : phoneNumberId;
         if (targetId == null || targetId.isBlank()) {
@@ -221,6 +294,20 @@ public class MetaApiClient {
                 });
     }
 
+    public record SendResult(
+            boolean success,
+            String metaMessageId,
+            String errorMessage
+    ) {
+        public static SendResult success(String metaMessageId) {
+            return new SendResult(true, metaMessageId, null);
+        }
+
+        public static SendResult failure(String errorMessage) {
+            return new SendResult(false, null, errorMessage);
+        }
+    }
+
     public record SubmissionResult(
             boolean success,
             String metaTemplateId,
@@ -235,4 +322,9 @@ public class MetaApiClient {
             return new SubmissionResult(false, null, null, errorMessage);
         }
     }
+
+    public record TemplateStatusResult(
+            String status,
+            String rejectionReason
+    ) {}
 }

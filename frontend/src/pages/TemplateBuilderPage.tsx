@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle, Loader2, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, CheckCircle2, Settings, Info, Send, Video, Phone, Smile, Paperclip, Camera, Mic, AlertTriangle, Loader2, XCircle, FileText, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createTemplate, updateTemplate, getTemplate } from '@/api/templates';
-import type { CreateTemplateRequest, TemplateCategory, UpdateTemplateRequest } from '@/api/types';
+import type { CreateTemplateRequest, TemplateCategory, TemplateHeaderType, UpdateTemplateRequest } from '@/api/types';
 import { PageId } from '../components/Layout';
 import { ApiClientError } from '@/api/client';
 
@@ -25,12 +25,16 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
     category: 'Marketing',
     content: '',
     language: 'en_US',
+    headerType: 'TEXT',
+    headerDocument: null,
     variables: [],
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState('');
   const [fetchingTemplate, setFetchingTemplate] = useState(isEditMode);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load template data when in edit mode
   useEffect(() => {
@@ -43,6 +47,8 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
             category: template.category,
             content: template.content,
             language: template.language.toLowerCase(),
+            headerType: template.headerType || 'TEXT',
+            headerDocument: null,
             variables: template.variables?.map((v) => ({ example: v.example })) || [],
           });
           // Generate preview
@@ -148,6 +154,40 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
     handleContentChange(newContent);
   };
 
+  const handleFileChange = (file: File | null) => {
+    if (file && file.type === 'application/pdf') {
+      setFormData(prev => ({ ...prev, headerDocument: file }));
+    } else if (file) {
+      setError('Only PDF files are allowed');
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
+  const clearFile = () => {
+    setFormData(prev => ({ ...prev, headerDocument: null }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   if (fetchingTemplate) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -230,6 +270,95 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
             </CardContent>
           </Card>
 
+          {/* Header Section */}
+          {!isEditMode && (
+            <Card className="bg-muted/30 border-none rounded-[2rem] p-4">
+              <CardContent className="pt-6 space-y-6">
+                <div className="space-y-3">
+                  <Label className="technical-label">Header Type</Label>
+                  <Select
+                    value={formData.headerType}
+                    onValueChange={(value) => {
+                      setFormData({ 
+                        ...formData, 
+                        headerType: value as TemplateHeaderType,
+                        headerDocument: value === 'TEXT' ? null : formData.headerDocument
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="bg-background border-none h-12 px-4 rounded-xl font-bold focus:ring-primary">
+                      <SelectValue placeholder="Select header type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TEXT">Text Only</SelectItem>
+                      <SelectItem value="DOCUMENT">Document (PDF)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground font-medium">
+                    Choose &quot;Document&quot; to attach a PDF file that will appear as the message header.
+                  </p>
+                </div>
+
+                {formData.headerType === 'DOCUMENT' && (
+                  <div className="space-y-3">
+                    <Label className="technical-label">Upload PDF Document</Label>
+                    <div
+                      className={`relative border-2 border-dashed rounded-xl p-6 transition-colors ${
+                        dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/20'
+                      }`}
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      
+                      {formData.headerDocument ? (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <FileText size={20} className="text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold">{formData.headerDocument.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(formData.headerDocument.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              clearFile();
+                            }}
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          >
+                            <X size={16} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <Upload size={32} className="mx-auto mb-3 text-muted-foreground/60" />
+                          <p className="text-sm font-bold mb-1">Drop your PDF here or click to browse</p>
+                          <p className="text-xs text-muted-foreground">Maximum file size: 10 MB</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Content Section */}
           <Card className="bg-muted/30 border-none rounded-[2rem] p-4">
             <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -277,7 +406,7 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
             </Button>
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || (formData.headerType === 'DOCUMENT' && !formData.headerDocument && !isEditMode)}
               className="h-14 px-10 font-bold rounded-xl shadow-xl shadow-primary/20 flex items-center gap-2 active:scale-95"
             >
               {loading ? (
@@ -339,6 +468,21 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
                   <span className="bg-[#d1eaef] text-[10px] px-3 py-1 rounded-lg text-slate-600 font-bold uppercase tracking-wider">Today</span>
                 </div>
 
+                {/* Document Header Preview */}
+                {formData.headerType === 'DOCUMENT' && (
+                  <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[90%] relative">
+                    <div className="flex items-center gap-3 p-2 bg-muted/30 rounded-xl">
+                      <FileText size={32} className="text-primary" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">
+                          {formData.headerDocument?.name || 'Document.pdf'}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">PDF</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[90%] relative">
                   <p className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
                     {preview || 'Your message preview will appear here...'}
@@ -387,6 +531,16 @@ export default function TemplateBuilderPage({ onNavigate, onTemplateSubmitted, e
                 )}
                 Content provided
               </div>
+              {formData.headerType === 'DOCUMENT' && (
+                <div className="flex items-center gap-3 text-[11px] font-bold text-foreground">
+                  {formData.headerDocument ? (
+                    <CheckCircle2 size={14} className="text-emerald-500" />
+                  ) : (
+                    <AlertTriangle size={14} className="text-amber-500" />
+                  )}
+                  Document uploaded
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
