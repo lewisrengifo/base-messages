@@ -76,71 +76,53 @@ public class TemplatesApiDelegateImpl implements TemplatesApiDelegate {
             String variables,
             ServerWebExchange exchange) {
 
-        // Extract file bytes from Flux<Part>
-        Mono<byte[]> fileBytesMono = headerDocument
-                .collectList()
-                .flatMap(parts -> {
-                    if (parts.isEmpty()) {
-                        return Mono.just((byte[]) null);
-                    }
-                    Part part = parts.get(0);
-                    if (part instanceof FilePart filePart) {
-                        return DataBufferUtils.join(filePart.content())
-                                .map(dataBuffer -> {
-                                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                                    dataBuffer.read(bytes);
-                                    DataBufferUtils.release(dataBuffer);
-                                    return bytes;
-                                });
-                    }
-                    return Mono.just((byte[]) null);
-                })
-                .switchIfEmpty(Mono.just((byte[]) null));
+        // Parse variables first (synchronous)
+        List<CreateTemplateCommand.TemplateVariableDto> variableList = null;
+        if (variables != null && !variables.isBlank()) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                variableList = mapper.readValue(variables,
+                        mapper.getTypeFactory().constructCollectionType(List.class, CreateTemplateCommand.TemplateVariableDto.class));
+            } catch (Exception e) {
+                // ignore parsing errors
+            }
+        }
 
-        // Extract file name
-        Mono<String> fileNameMono = headerDocument
-                .collectList()
-                .map(parts -> {
-                    if (parts.isEmpty()) return null;
-                    Part part = parts.get(0);
-                    if (part instanceof FilePart filePart) {
-                        return filePart.filename();
-                    }
-                    return null;
-                })
-                .switchIfEmpty(Mono.just((String) null));
+        final List<CreateTemplateCommand.TemplateVariableDto> finalVariableList = variableList;
 
-        return Mono.zip(fileBytesMono, fileNameMono)
-                .flatMap(tuple -> {
-                    byte[] fileBytes = tuple.getT1();
-                    String fileName = tuple.getT2();
-
-                    List<CreateTemplateCommand.TemplateVariableDto> variableList = null;
-                    if (variables != null && !variables.isBlank()) {
-                        try {
-                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                            variableList = mapper.readValue(variables,
-                                    mapper.getTypeFactory().constructCollectionType(List.class, CreateTemplateCommand.TemplateVariableDto.class));
-                        } catch (Exception e) {
-                            // ignore parsing errors
-                        }
-                    }
-
-                    CreateTemplateCommand command = new CreateTemplateCommand(
-                            name,
-                            category,
-                            content,
-                            language,
-                            headerType,
-                            fileBytes,
-                            fileName,
-                            variableList
-                    );
-
-                    return templateService.createTemplate(command)
-                            .map(this::toApiModel)
-                            .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template));
-                });
+        return headerDocument
+                .ofType(FilePart.class)
+                .next()
+                .flatMap(filePart -> DataBufferUtils.join(filePart.content())
+                        .map(dataBuffer -> {
+                            byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                            dataBuffer.read(bytes);
+                            DataBufferUtils.release(dataBuffer);
+                            return bytes;
+                        })
+                        .map(fileBytes -> new CreateTemplateCommand(
+                                name,
+                                category,
+                                content,
+                                language,
+                                headerType,
+                                fileBytes,
+                                filePart.filename(),
+                                finalVariableList
+                        )))
+                .switchIfEmpty(Mono.fromSupplier(() -> new CreateTemplateCommand(
+                        name,
+                        category,
+                        content,
+                        language,
+                        headerType,
+                        null,
+                        null,
+                        finalVariableList
+                )))
+                .flatMap(command -> templateService.createTemplate(command)
+                        .map(this::toApiModel)
+                        .map(template -> ResponseEntity.status(HttpStatus.CREATED).body(template)));
     }
 
     @Override

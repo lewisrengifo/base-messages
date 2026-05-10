@@ -253,11 +253,11 @@ public class TemplateApplicationService {
 
                     final Template currentTemplate = template;
 
-                    // If document header, upload to Meta first
-                    Mono<String> headerHandleMono = Mono.just((String) null);
+                    // Build the submission Mono
+                    Mono<SubmissionResult> submitMono;
                     if (currentTemplate.getHeaderType() == Template.HeaderType.DOCUMENT
                             && currentTemplate.getHeaderDocumentKey() != null) {
-                        headerHandleMono = Mono.fromCallable(() -> {
+                        submitMono = Mono.fromCallable(() -> {
                                     byte[] bytes = documentBytes;
                                     if (bytes == null) {
                                         bytes = storageService.downloadFile(currentTemplate.getHeaderDocumentKey());
@@ -278,25 +278,38 @@ public class TemplateApplicationService {
                                 .onErrorResume(error -> {
                                     log.error("Failed to upload document to Meta for template {}: {}",
                                             currentTemplate.getName(), error.getMessage());
-                                    return Mono.just((String) null);
+                                    return Mono.empty();
+                                })
+                                .flatMap(headerHandle -> {
+                                    currentTemplate.setHeaderHandle(headerHandle);
+                                    return metaApiClient.submitTemplate(
+                                            connection.getWabaId(),
+                                            accessToken,
+                                            currentTemplate.getName(),
+                                            currentTemplate.getCategory().name(),
+                                            languageToCode(currentTemplate.getLanguage()),
+                                            currentTemplate.getContent(),
+                                            metaVariables != null ? new ArrayList<>(metaVariables) : null,
+                                            currentTemplate.getHeaderType() != null ? currentTemplate.getHeaderType().name() : null,
+                                            headerHandle
+                                    );
                                 });
+                    } else {
+                        currentTemplate.setHeaderHandle(null);
+                        submitMono = metaApiClient.submitTemplate(
+                                connection.getWabaId(),
+                                accessToken,
+                                currentTemplate.getName(),
+                                currentTemplate.getCategory().name(),
+                                languageToCode(currentTemplate.getLanguage()),
+                                currentTemplate.getContent(),
+                                metaVariables != null ? new ArrayList<>(metaVariables) : null,
+                                currentTemplate.getHeaderType() != null ? currentTemplate.getHeaderType().name() : null,
+                                null
+                        );
                     }
 
-                    return headerHandleMono
-                            .flatMap(headerHandle -> {
-                                currentTemplate.setHeaderHandle(headerHandle);
-                                return metaApiClient.submitTemplate(
-                                        connection.getWabaId(),
-                                        accessToken,
-                                        currentTemplate.getName(),
-                                        currentTemplate.getCategory().name(),
-                                        languageToCode(currentTemplate.getLanguage()),
-                                        currentTemplate.getContent(),
-                                        metaVariables != null ? new ArrayList<>(metaVariables) : null,
-                                        currentTemplate.getHeaderType() != null ? currentTemplate.getHeaderType().name() : null,
-                                        headerHandle
-                                );
-                            })
+                    return submitMono
                             .flatMap(result -> handleSubmissionResult(result, currentTemplate))
                             .onErrorResume(error -> {
                                 log.error("Meta submission failed for template {}: {}", currentTemplate.getName(), error.getMessage());

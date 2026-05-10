@@ -64,11 +64,7 @@ export async function createTemplate(data: CreateTemplateRequest): Promise<Templ
     formData.append('variables', JSON.stringify(data.variables));
   }
 
-  return apiClient.post<Template>(TEMPLATES_ENDPOINT, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  return apiClient.post<Template>(TEMPLATES_ENDPOINT, formData);
 }
 
 /**
