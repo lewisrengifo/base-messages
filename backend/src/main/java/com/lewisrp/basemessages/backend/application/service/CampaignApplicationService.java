@@ -62,7 +62,7 @@ public class CampaignApplicationService {
                                 "Template must be APPROVED to create a campaign. Current status: " + template.getStatus()));
                     }
 
-                    return resolveContactIds(command.getAudienceType(), command.getAudienceGroupId())
+                    return resolveContactIds(command.getAudienceType(), command.getAudienceGroupId(), command.getContactIds())
                             .flatMap(contactIds -> {
                                 if (contactIds.isEmpty()) {
                                     return Mono.error(new IllegalArgumentException(
@@ -250,7 +250,7 @@ public class CampaignApplicationService {
                 .switchIfEmpty(Mono.error(new NotFoundException("Campaign not found with code: " + campaignCode)));
     }
 
-    private Mono<List<Long>> resolveContactIds(String audienceType, String audienceGroupId) {
+    private Mono<List<Long>> resolveContactIds(String audienceType, String audienceGroupId, List<Long> contactIds) {
         Campaign.AudienceType type;
         try {
             type = Campaign.AudienceType.valueOf(audienceType.toUpperCase());
@@ -272,6 +272,12 @@ public class CampaignApplicationService {
             case SEGMENT -> {
                 log.warn("Segments are not yet supported in MVP. Treating as empty.");
                 yield Mono.just(List.<Long>of());
+            }
+            case MANUAL -> {
+                if (contactIds == null || contactIds.isEmpty()) {
+                    yield Mono.error(new IllegalArgumentException("contactIds is required for manual audience"));
+                }
+                yield Mono.just(contactIds);
             }
         };
     }

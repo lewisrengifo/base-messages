@@ -1013,10 +1013,15 @@ components:
           properties:
             type:
               type: string
-              enum: [all, group, segment]
+              enum: [all, group, segment, manual]
             groupId:
               type: string
               description: Required if type is 'group'
+            contactIds:
+              type: array
+              items:
+                type: integer
+              description: Required if type is 'manual'. List of contact IDs to send to.
         schedule:
           type: object
           required:

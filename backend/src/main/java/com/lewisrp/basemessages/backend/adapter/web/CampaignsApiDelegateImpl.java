@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -144,11 +145,19 @@ public class CampaignsApiDelegateImpl implements CampaignsApiDelegate {
             }
         }
 
+        List<Long> contactIds = null;
+        if (request.getAudience() != null && request.getAudience().getContactIds() != null) {
+            contactIds = request.getAudience().getContactIds().stream()
+                    .map(Integer::longValue)
+                    .collect(Collectors.toList());
+        }
+
         return new CreateCampaignCommand(
                 request.getName(),
                 request.getTemplateId() != null ? request.getTemplateId().longValue() : null,
                 request.getAudience() != null ? request.getAudience().getType().getValue() : null,
                 request.getAudience() != null ? request.getAudience().getGroupId() : null,
+                contactIds,
                 request.getSchedule() != null ? request.getSchedule().getType().getValue() : null,
                 scheduledAt
         );

@@ -187,8 +187,9 @@ export interface CreateCampaignRequest {
   name: string;
   templateId: number;
   audience: {
-    type: 'all' | 'group' | 'segment';
+    type: 'all' | 'group' | 'segment' | 'manual';
     groupId?: string;
+    contactIds?: number[];
   };
   schedule: {
     type: 'immediate' | 'scheduled';

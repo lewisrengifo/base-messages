@@ -104,7 +104,8 @@ export default function CampaignBuilderPage({ onNavigate }: CampaignBuilderPageP
         name: campaignName.trim(),
         templateId: selectedTemplateId,
         audience: {
-          type: 'all',
+          type: audienceType === 'manual' ? 'manual' : 'all',
+          contactIds: audienceType === 'manual' ? selectedContactIds : undefined,
         },
         schedule: {
           type: scheduleType,

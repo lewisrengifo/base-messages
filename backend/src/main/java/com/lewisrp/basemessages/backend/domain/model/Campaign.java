@@ -50,7 +50,7 @@ public class Campaign {
      * Audience targeting type.
      */
     public enum AudienceType {
-        ALL, GROUP, SEGMENT
+        ALL, GROUP, SEGMENT, MANUAL
     }
 
     /**
